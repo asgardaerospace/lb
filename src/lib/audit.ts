@@ -7,9 +7,17 @@ export type AuditAction =
   | "supplier_profile.revisions_requested"
   | "program.created"
   | "rfq.created"
-  | "rfq.submitted";
+  | "rfq.submitted"
+  | "work_package.created"
+  | "routing_decision.created"
+  | "routing_decision.quote_requested";
 
-export type AuditEntityType = "supplier_profile" | "program" | "rfq";
+export type AuditEntityType =
+  | "supplier_profile"
+  | "program"
+  | "rfq"
+  | "work_package"
+  | "routing_decision";
 
 export interface AuditEvent {
   action: AuditAction;
