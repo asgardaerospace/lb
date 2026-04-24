@@ -155,4 +155,114 @@ values
   )
 on conflict (id) do nothing;
 
+-- ---------------------------------------------------------------------------
+-- Buyer organization and buyer admin user (added for MVP end-to-end testing).
+--   buyer_org_id       = 00000000-0000-0000-0000-0000000000c1
+--   buyer_admin_id     = 33333333-3333-3333-3333-333333333333
+--   password           = buyer-dev-change-me
+-- ---------------------------------------------------------------------------
+
+insert into public.organizations (id, name, type, itar_registered)
+values
+  ('00000000-0000-0000-0000-0000000000c1', 'Falcon Works', 'buyer', false)
+on conflict (id) do nothing;
+
+insert into auth.users (
+  instance_id,
+  id,
+  aud,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  created_at,
+  updated_at,
+  confirmation_token,
+  email_change,
+  email_change_token_new,
+  recovery_token
+)
+values (
+  '00000000-0000-0000-0000-000000000000',
+  '33333333-3333-3333-3333-333333333333',
+  'authenticated',
+  'authenticated',
+  'planner@falconworks.dev',
+  crypt('buyer-dev-change-me', gen_salt('bf')),
+  now(),
+  '{"provider":"email","providers":["email"]}'::jsonb,
+  '{}'::jsonb,
+  now(),
+  now(),
+  '', '', '', ''
+)
+on conflict (id) do nothing;
+
+insert into auth.identities (
+  id, user_id, identity_data, provider, provider_id,
+  last_sign_in_at, created_at, updated_at
+)
+values (
+  gen_random_uuid(),
+  '33333333-3333-3333-3333-333333333333',
+  jsonb_build_object(
+    'sub', '33333333-3333-3333-3333-333333333333',
+    'email', 'planner@falconworks.dev'
+  ),
+  'email',
+  '33333333-3333-3333-3333-333333333333',
+  now(), now(), now()
+)
+on conflict (provider, provider_id) do nothing;
+
+insert into public.users (id, organization_id, email, role, status)
+values (
+  '33333333-3333-3333-3333-333333333333',
+  '00000000-0000-0000-0000-0000000000c1',
+  'planner@falconworks.dev',
+  'buyer_admin',
+  'active'
+)
+on conflict (id) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- Pre-approved supplier profile for Acme Machining so the supplier appears
+-- on the routing console's candidate list without having to walk the
+-- profile-submit/approve flow manually during MVP validation.
+-- ---------------------------------------------------------------------------
+
+insert into public.supplier_profiles (
+  organization_id,
+  approval_status,
+  company_summary,
+  facility_size_sqft,
+  employee_count,
+  as9100_certified,
+  iso9001_certified,
+  itar_registered,
+  cmmc_status,
+  submitted_at,
+  reviewed_at,
+  reviewed_by,
+  created_by
+)
+values (
+  '00000000-0000-0000-0000-0000000000b1',
+  'approved',
+  'Acme Machining — precision CNC shop (seed data).',
+  18000,
+  42,
+  true,
+  true,
+  false,
+  'level_1',
+  now(),
+  now(),
+  '11111111-1111-1111-1111-111111111111',
+  '22222222-2222-2222-2222-222222222222'
+)
+on conflict (organization_id) do nothing;
+
 commit;
