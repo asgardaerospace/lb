@@ -53,3 +53,39 @@ export async function requireRole(roles: UserRole[]): Promise<SessionUser> {
 
 export const requireAsgardAdmin = () => requireRole(["asgard_admin"]);
 export const requireSupplierAdmin = () => requireRole(["supplier_admin"]);
+
+/**
+ * Returns the current session user, or `null` when:
+ *   - the user is unauthenticated (401)
+ *   - the user row is missing / disabled (401/403)
+ *   - Supabase env vars are absent (preview deployments without secrets)
+ *   - the network call to Supabase fails for any reason
+ *
+ * It NEVER throws. Use this in UI-preview surfaces (role dashboards,
+ * shell, landing screens) so that a missing session/env does not crash
+ * the page. API routes must continue to use `requireUser` / `requireRole`
+ * so they return 401/403 as expected.
+ */
+export async function getOptionalUser(): Promise<SessionUser | null> {
+  try {
+    return await requireUser();
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production") {
+      // Log in dev only — on Vercel we want quiet preview-mode fallbacks.
+      console.warn(
+        "[auth] getOptionalUser falling back to preview mode:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+    return null;
+  }
+}
+
+/**
+ * True when the request cannot be resolved to a real authenticated user.
+ * Callers may use this to decide whether to render illustrative preview
+ * data or real data from Supabase.
+ */
+export async function isPreviewMode(): Promise<boolean> {
+  return (await getOptionalUser()) === null;
+}

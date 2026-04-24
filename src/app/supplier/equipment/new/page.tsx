@@ -1,17 +1,11 @@
-import { redirect } from "next/navigation";
-import { AuthError, requireRole } from "@/lib/auth";
+import { getOptionalUser } from "@/lib/auth";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Card, PreviewDataBanner, LinkButton } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function AddEquipmentPage() {
-  try {
-    await requireRole(["supplier_admin"]);
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
-  }
+  await getOptionalUser();
 
   return (
     <>

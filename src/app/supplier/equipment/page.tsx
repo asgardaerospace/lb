@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { AuthError, requireRole } from "@/lib/auth";
+import { getOptionalUser } from "@/lib/auth";
 import { PageHeader } from "@/components/shell/PageHeader";
 import {
   DataTable,
@@ -12,12 +11,7 @@ import { PREVIEW_EQUIPMENT } from "@/lib/ui/mock";
 export const dynamic = "force-dynamic";
 
 export default async function SupplierEquipmentPage() {
-  try {
-    await requireRole(["supplier_admin", "supplier_user"]);
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
-  }
+  await getOptionalUser();
 
   type Row = (typeof PREVIEW_EQUIPMENT)[number];
   const columns: Column<Row>[] = [

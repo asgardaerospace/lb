@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { AuthError, requireAsgardAdmin } from "@/lib/auth";
+import { getOptionalUser } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
 import {
@@ -24,125 +23,100 @@ import {
 
 export const dynamic = "force-dynamic";
 
-async function loadKpis() {
-  const supabase = await createServerSupabase();
-
-  const [programs, rfqs, quotes, jobs] = await Promise.all([
-    supabase.from("programs").select("id", { count: "exact", head: true }),
-    supabase.from("rfqs").select("id,status", { count: "exact" }),
-    supabase
-      .from("quotes")
-      .select("quoted_price,status,submitted_at", { count: "exact" }),
-    supabase.from("jobs").select("id,status", { count: "exact" }),
-  ]);
-
-  const routedValue = (quotes.data ?? [])
-    .filter((q) => q.status === "accepted")
-    .reduce((acc, q) => acc + (Number(q.quoted_price) || 0), 0);
-
-  const inProduction = (jobs.data ?? []).filter(
-    (j) => j.status === "in_production",
-  ).length;
-
-  return {
-    programCount: programs.count ?? 0,
-    rfqCount: rfqs.count ?? 0,
-    quoteCount: quotes.count ?? 0,
-    jobCount: jobs.count ?? 0,
-    routedValue,
-    inProduction,
-  };
+interface AdminKpis {
+  programCount: number;
+  rfqCount: number;
+  quoteCount: number;
+  jobCount: number;
+  routedValue: number;
+  inProduction: number;
 }
 
-async function loadPipelineRows() {
-  const supabase = await createServerSupabase();
-  const { data } = await supabase
-    .from("jobs")
-    .select(
-      "id,status,job_number,work_packages(package_name,rfqs(rfq_title,programs(program_name)))",
-    )
-    .order("updated_at", { ascending: false })
-    .limit(10);
-  return data ?? [];
+const PREVIEW_KPIS: AdminKpis = {
+  programCount: 15,
+  rfqCount: 33,
+  quoteCount: 34,
+  jobCount: 12,
+  routedValue: 36400,
+  inProduction: 6,
+};
+
+type PipelineRow = {
+  id: string;
+  status: string;
+  job_number: string | null;
+  work_packages:
+    | {
+        package_name?: string;
+        rfqs?: {
+          rfq_title?: string;
+          programs?: { program_name?: string };
+        };
+      }
+    | null;
+};
+
+async function loadKpis(): Promise<AdminKpis | null> {
+  try {
+    const supabase = await createServerSupabase();
+    const [programs, rfqs, quotes, jobs] = await Promise.all([
+      supabase.from("programs").select("id", { count: "exact", head: true }),
+      supabase.from("rfqs").select("id,status", { count: "exact" }),
+      supabase
+        .from("quotes")
+        .select("quoted_price,status,submitted_at", { count: "exact" }),
+      supabase.from("jobs").select("id,status", { count: "exact" }),
+    ]);
+
+    const routedValue = (quotes.data ?? [])
+      .filter((q) => q.status === "accepted")
+      .reduce((acc, q) => acc + (Number(q.quoted_price) || 0), 0);
+
+    const inProduction = (jobs.data ?? []).filter(
+      (j) => j.status === "in_production",
+    ).length;
+
+    return {
+      programCount: programs.count ?? 0,
+      rfqCount: rfqs.count ?? 0,
+      quoteCount: quotes.count ?? 0,
+      jobCount: jobs.count ?? 0,
+      routedValue,
+      inProduction,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function loadPipelineRows(): Promise<PipelineRow[] | null> {
+  try {
+    const supabase = await createServerSupabase();
+    const { data } = await supabase
+      .from("jobs")
+      .select(
+        "id,status,job_number,work_packages(package_name,rfqs(rfq_title,programs(program_name)))",
+      )
+      .order("updated_at", { ascending: false })
+      .limit(10);
+    return (data ?? []) as PipelineRow[];
+  } catch {
+    return null;
+  }
 }
 
 export default async function AdminOverviewPage() {
-  try {
-    await requireAsgardAdmin();
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
-  }
+  const user = await getOptionalUser();
+  const isAdmin = user?.role === "asgard_admin";
 
-  const [kpis, pipeline] = await Promise.all([
-    loadKpis(),
-    loadPipelineRows(),
-  ]);
+  const [kpisLive, pipelineLive] = isAdmin
+    ? await Promise.all([loadKpis(), loadPipelineRows()])
+    : [null, null];
 
-  const usePreview = pipeline.length === 0;
-
-  const liveColumns: Column<(typeof PREVIEW_PIPELINE_ROWS)[number]>[] = [
-    { key: "part", header: "Part", render: (r) => <span className="text-slate-200">{r.part}</span> },
-    { key: "program", header: "Program", render: (r) => <span className="text-slate-400">{r.program}</span> },
-    { key: "module", header: "Work Package", render: (r) => <span className="text-slate-400">{r.module}</span> },
-    {
-      key: "supplier",
-      header: "Supplier",
-      render: (r) => <span className="text-slate-400">{r.supplier}</span>,
-    },
-    {
-      key: "status",
-      header: "Job Status",
-      render: (r) => {
-        const { label, tone } = mapStatus(jobStatusMap, r.partStatus);
-        return <StatusBadge tone={tone}>{label}</StatusBadge>;
-      },
-    },
-    {
-      key: "routing",
-      header: "Routing",
-      render: (r) => {
-        const { label, tone } = mapStatus(routingStatusMap, r.routing);
-        return <StatusBadge tone={tone}>{label}</StatusBadge>;
-      },
-    },
-    {
-      key: "quote",
-      header: "Quote",
-      render: (r) => {
-        const { label, tone } = mapStatus(quoteStatusMap, r.quote);
-        return <StatusBadge tone={tone}>{label}</StatusBadge>;
-      },
-    },
-  ];
-
-  const attentionColumns: Column<(typeof PREVIEW_ATTENTION_ROWS)[number]>[] = [
-    { key: "part", header: "Part", render: (r) => <span className="text-slate-200">{r.part}</span> },
-    { key: "program", header: "Program", render: (r) => <span className="text-slate-400">{r.program}</span> },
-    {
-      key: "readiness",
-      header: "Readiness",
-      render: (r) => (
-        <div className="flex items-center gap-3">
-          <ProgressBar value={r.readiness} tone="emerald" />
-        </div>
-      ),
-    },
-    { key: "level", header: "Level", render: (r) => <span className="text-slate-400">{r.level}</span> },
-    {
-      key: "routing",
-      header: "Routing",
-      render: (r) => {
-        const { label, tone } = mapStatus(routingStatusMap, r.routing);
-        return <StatusBadge tone={tone}>{label}</StatusBadge>;
-      },
-    },
-    {
-      key: "issue",
-      header: "Next Action",
-      render: (r) => <span className="text-xs text-amber-200/80">{r.issue}</span>,
-    },
-  ];
+  const kpis = kpisLive ?? PREVIEW_KPIS;
+  const pipeline = pipelineLive ?? [];
+  const previewMode = !isAdmin || kpisLive === null;
+  const usePreviewPipeline = previewMode || pipeline.length === 0;
 
   return (
     <>
@@ -161,6 +135,10 @@ export default async function AdminOverviewPage() {
           </>
         }
       />
+
+      {previewMode && (
+        <PreviewDataBanner reason="No active asgard_admin session — KPIs and pipeline tables show illustrative preview data only." />
+      )}
 
       <KpiGrid>
         <KpiCard
@@ -189,10 +167,6 @@ export default async function AdminOverviewPage() {
         />
       </KpiGrid>
 
-      {usePreview && (
-        <PreviewDataBanner reason="Live pipeline is empty — showing illustrative rows so operators can preview layout." />
-      )}
-
       <SectionHeader
         title="Live Work Pipeline"
         subtitle="Parts actively routing, quoting, or in production"
@@ -203,69 +177,20 @@ export default async function AdminOverviewPage() {
         }
       />
       <div className="mb-8">
-        {usePreview ? (
+        {usePreviewPipeline ? (
           <DataTable
-            columns={liveColumns}
-            rows={PREVIEW_PIPELINE_ROWS as unknown as (typeof PREVIEW_PIPELINE_ROWS)[number][]}
+            columns={previewPipelineColumns}
+            rows={
+              PREVIEW_PIPELINE_ROWS as unknown as (typeof PREVIEW_PIPELINE_ROWS)[number][]
+            }
             rowKey={(r, i) => `${r.part}-${i}`}
             previewBanner
           />
         ) : (
           <DataTable
-            columns={[
-              {
-                key: "job",
-                header: "Job",
-                render: (
-                  j: (typeof pipeline)[number] & { job_number: string },
-                ) => <span className="font-mono text-xs text-slate-300">{j.job_number}</span>,
-              },
-              {
-                key: "rfq",
-                header: "RFQ",
-                render: (j: (typeof pipeline)[number]) => {
-                  const wp = j.work_packages as {
-                    package_name?: string;
-                    rfqs?: { rfq_title?: string };
-                  } | null;
-                  return (
-                    <span className="text-slate-300">
-                      {wp?.rfqs?.rfq_title ?? wp?.package_name ?? "—"}
-                    </span>
-                  );
-                },
-              },
-              {
-                key: "program",
-                header: "Program",
-                render: (j: (typeof pipeline)[number]) => {
-                  const program =
-                    (
-                      j.work_packages as {
-                        rfqs?: { programs?: { program_name?: string } };
-                      } | null
-                    )?.rfqs?.programs?.program_name ?? "—";
-                  return <span className="text-slate-400">{program}</span>;
-                },
-              },
-              {
-                key: "status",
-                header: "Status",
-                render: (j: (typeof pipeline)[number]) => {
-                  const { label, tone } = mapStatus(jobStatusMap, j.status as string);
-                  return <StatusBadge tone={tone}>{label}</StatusBadge>;
-                },
-              },
-              {
-                key: "progress",
-                header: "Progress",
-                render: (j: (typeof pipeline)[number]) => (
-                  <ProgressBar value={jobStatusToProgress(j.status as string)} />
-                ),
-              },
-            ]}
+            columns={livePipelineColumns}
             rows={pipeline}
-            rowKey={(r: { id: string }) => r.id}
+            rowKey={(r) => r.id}
           />
         )}
       </div>
@@ -276,10 +201,146 @@ export default async function AdminOverviewPage() {
       />
       <DataTable
         columns={attentionColumns}
-        rows={PREVIEW_ATTENTION_ROWS as unknown as (typeof PREVIEW_ATTENTION_ROWS)[number][]}
+        rows={
+          PREVIEW_ATTENTION_ROWS as unknown as (typeof PREVIEW_ATTENTION_ROWS)[number][]
+        }
         rowKey={(r, i) => `${r.part}-${i}`}
         previewBanner
       />
     </>
   );
 }
+
+const previewPipelineColumns: Column<(typeof PREVIEW_PIPELINE_ROWS)[number]>[] = [
+  {
+    key: "part",
+    header: "Part",
+    render: (r) => <span className="text-slate-200">{r.part}</span>,
+  },
+  {
+    key: "program",
+    header: "Program",
+    render: (r) => <span className="text-slate-400">{r.program}</span>,
+  },
+  {
+    key: "module",
+    header: "Work Package",
+    render: (r) => <span className="text-slate-400">{r.module}</span>,
+  },
+  {
+    key: "supplier",
+    header: "Supplier",
+    render: (r) => <span className="text-slate-400">{r.supplier}</span>,
+  },
+  {
+    key: "status",
+    header: "Job Status",
+    render: (r) => {
+      const { label, tone } = mapStatus(jobStatusMap, r.partStatus);
+      return <StatusBadge tone={tone}>{label}</StatusBadge>;
+    },
+  },
+  {
+    key: "routing",
+    header: "Routing",
+    render: (r) => {
+      const { label, tone } = mapStatus(routingStatusMap, r.routing);
+      return <StatusBadge tone={tone}>{label}</StatusBadge>;
+    },
+  },
+  {
+    key: "quote",
+    header: "Quote",
+    render: (r) => {
+      const { label, tone } = mapStatus(quoteStatusMap, r.quote);
+      return <StatusBadge tone={tone}>{label}</StatusBadge>;
+    },
+  },
+];
+
+const livePipelineColumns: Column<PipelineRow>[] = [
+  {
+    key: "job",
+    header: "Job",
+    render: (j) => (
+      <span className="font-mono text-xs text-slate-300">
+        {j.job_number ?? j.id.slice(0, 8)}
+      </span>
+    ),
+  },
+  {
+    key: "rfq",
+    header: "RFQ",
+    render: (j) => (
+      <span className="text-slate-300">
+        {j.work_packages?.rfqs?.rfq_title ??
+          j.work_packages?.package_name ??
+          "—"}
+      </span>
+    ),
+  },
+  {
+    key: "program",
+    header: "Program",
+    render: (j) => (
+      <span className="text-slate-400">
+        {j.work_packages?.rfqs?.programs?.program_name ?? "—"}
+      </span>
+    ),
+  },
+  {
+    key: "status",
+    header: "Status",
+    render: (j) => {
+      const { label, tone } = mapStatus(jobStatusMap, j.status);
+      return <StatusBadge tone={tone}>{label}</StatusBadge>;
+    },
+  },
+  {
+    key: "progress",
+    header: "Progress",
+    render: (j) => <ProgressBar value={jobStatusToProgress(j.status)} />,
+  },
+];
+
+const attentionColumns: Column<(typeof PREVIEW_ATTENTION_ROWS)[number]>[] = [
+  {
+    key: "part",
+    header: "Part",
+    render: (r) => <span className="text-slate-200">{r.part}</span>,
+  },
+  {
+    key: "program",
+    header: "Program",
+    render: (r) => <span className="text-slate-400">{r.program}</span>,
+  },
+  {
+    key: "readiness",
+    header: "Readiness",
+    render: (r) => (
+      <div className="flex items-center gap-3">
+        <ProgressBar value={r.readiness} tone="emerald" />
+      </div>
+    ),
+  },
+  {
+    key: "level",
+    header: "Level",
+    render: (r) => <span className="text-slate-400">{r.level}</span>,
+  },
+  {
+    key: "routing",
+    header: "Routing",
+    render: (r) => {
+      const { label, tone } = mapStatus(routingStatusMap, r.routing);
+      return <StatusBadge tone={tone}>{label}</StatusBadge>;
+    },
+  },
+  {
+    key: "issue",
+    header: "Next Action",
+    render: (r) => (
+      <span className="text-xs text-amber-200/80">{r.issue}</span>
+    ),
+  },
+];

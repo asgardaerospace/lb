@@ -171,6 +171,109 @@ export const PREVIEW_PROGRAMS_BUYER = [
   },
 ] as const;
 
+export const PREVIEW_SUPPLIER_WORK_PACKAGES = [
+  {
+    id: "wp-prev-1",
+    title: "PR-001 Motor Mount Bracket",
+    priority: "high",
+    parts: 3,
+    need_by: "2026-06-15",
+    description:
+      "CNC machined aluminum mounts for the A1 airframe. Composite layup tolerance applies on mating surfaces.",
+  },
+  {
+    id: "wp-prev-2",
+    title: "TC-001 Turbine Blade set",
+    priority: "urgent",
+    parts: 4,
+    need_by: "2026-05-30",
+    description:
+      "5-axis machined superalloy blades; requires AS9100 traceability and inspection records.",
+  },
+  {
+    id: "wp-prev-3",
+    title: "TC-004 Exhaust Cone",
+    priority: "normal",
+    parts: 2,
+    need_by: "2026-07-01",
+    description: "Sheet metal form; post-process heat treatment required.",
+  },
+] as const;
+
+export const PREVIEW_SUPPLIER_JOBS = [
+  {
+    id: "job-prev-1",
+    job_number: "JOB-0087",
+    status: "in_production" as const,
+    due_date: "2026-06-15",
+    flagged: false,
+  },
+  {
+    id: "job-prev-2",
+    job_number: "JOB-0091",
+    status: "scheduled" as const,
+    due_date: "2026-07-02",
+    flagged: false,
+  },
+  {
+    id: "job-prev-3",
+    job_number: "JOB-0092",
+    status: "inspection" as const,
+    due_date: "2026-05-20",
+    flagged: true,
+  },
+] as const;
+
+export const PREVIEW_BUYER_PROGRAMS = [
+  {
+    id: "prog-prev-1",
+    program_name: "Mjolnir Propulsion System",
+    program_type: "Propulsion · Production",
+    description: "High energy propulsion system for hypersonic applications.",
+    status: "active",
+    itar_controlled: true,
+    cui_controlled: false,
+    compliance_level: "AS9100",
+  },
+  {
+    id: "prog-prev-2",
+    program_name: "ISR Drone Platform — A1",
+    program_type: "ISR · LRIP",
+    description: "ISR airframe platform moving into low-rate initial production.",
+    status: "active",
+    itar_controlled: true,
+    cui_controlled: true,
+    compliance_level: "AS9100",
+  },
+] as const;
+
+export const PREVIEW_BUYER_RFQS = [
+  {
+    id: "rfq-prev-1",
+    rfq_title: "Combustion chamber — short run",
+    status: "routing_in_progress",
+    priority: "high",
+    quantity: 12,
+    required_delivery_date: "2026-06-10",
+  },
+  {
+    id: "rfq-prev-2",
+    rfq_title: "Avionics enclosure, A1 airframe",
+    status: "quotes_requested",
+    priority: "normal",
+    quantity: 40,
+    required_delivery_date: "2026-07-15",
+  },
+  {
+    id: "rfq-prev-3",
+    rfq_title: "Thermal bracket lot",
+    status: "submitted",
+    priority: "low",
+    quantity: 120,
+    required_delivery_date: "2026-08-01",
+  },
+] as const;
+
 export const PREVIEW_PRODUCTION_UPDATES = [
   {
     part: "TC-001 Turbine Blade",

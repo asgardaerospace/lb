@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
-import { AuthError, requireRole } from "@/lib/auth";
+import Link from "next/link";
+import { getOptionalUser } from "@/lib/auth";
 import { listQuoteRequestsForSupplier } from "@/lib/routing/repository";
 import { listSupplierInbox } from "@/lib/quotes/repository";
 import { listJobsForSupplier } from "@/lib/jobs/repository";
@@ -14,26 +14,45 @@ import {
   ProgressBar,
   LinkButton,
   EmptyState,
+  PreviewDataBanner,
 } from "@/components/ui";
 import { formatDate, jobStatusToProgress } from "@/lib/ui/format";
-import Link from "next/link";
+import {
+  PREVIEW_SUPPLIER_JOBS,
+  PREVIEW_SUPPLIER_WORK_PACKAGES,
+} from "@/lib/ui/mock";
 
 export const dynamic = "force-dynamic";
 
 export default async function SupplierDashboardPage() {
-  let user;
-  try {
-    user = await requireRole(["supplier_admin", "supplier_user"]);
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
+  const user = await getOptionalUser();
+  const isSupplier =
+    user?.role === "supplier_admin" || user?.role === "supplier_user";
+
+  let requests: Awaited<ReturnType<typeof listQuoteRequestsForSupplier>> = [];
+  let inbox: Awaited<ReturnType<typeof listSupplierInbox>> = [];
+  let jobs: Awaited<ReturnType<typeof listJobsForSupplier>> = [];
+  let liveLoadFailed = false;
+
+  if (isSupplier && user) {
+    try {
+      [requests, inbox, jobs] = await Promise.all([
+        listQuoteRequestsForSupplier(user.organization_id),
+        listSupplierInbox(user.organization_id),
+        listJobsForSupplier(user.organization_id),
+      ]);
+    } catch {
+      liveLoadFailed = true;
+    }
   }
 
-  const [requests, inbox, jobs] = await Promise.all([
-    listQuoteRequestsForSupplier(user.organization_id),
-    listSupplierInbox(user.organization_id),
-    listJobsForSupplier(user.organization_id),
-  ]);
+  const previewMode = !isSupplier || liveLoadFailed;
+
+  if (previewMode) {
+    return (
+      <SupplierDashboardPreview previewReason={previewReasonFor(user, liveLoadFailed)} />
+    );
+  }
 
   const pendingQuotes = inbox.filter(
     (e) => !e.existing_quote || e.existing_quote.status === "draft",
@@ -52,7 +71,11 @@ export default async function SupplierDashboardPage() {
             <LinkButton href="/supplier/profile" variant="secondary" size="sm">
               Company Profile
             </LinkButton>
-            <LinkButton href="/supplier/quote-requests" variant="primary" size="sm">
+            <LinkButton
+              href="/supplier/quote-requests"
+              variant="primary"
+              size="sm"
+            >
               Open Quote Requests
             </LinkButton>
           </>
@@ -177,6 +200,138 @@ export default async function SupplierDashboardPage() {
           })}
         </div>
       )}
+    </>
+  );
+}
+
+function previewReasonFor(
+  user: Awaited<ReturnType<typeof getOptionalUser>>,
+  liveLoadFailed: boolean,
+): string {
+  if (!user) {
+    return "No supplier session detected. Showing illustrative work packages and jobs so the layout can be reviewed without live data.";
+  }
+  if (liveLoadFailed) {
+    return "Could not reach Supabase to load live supplier data. Showing illustrative preview content for layout review.";
+  }
+  return "Signed in account does not belong to a supplier organization. Showing illustrative preview content.";
+}
+
+function SupplierDashboardPreview({ previewReason }: { previewReason: string }) {
+  const totalParts = PREVIEW_SUPPLIER_WORK_PACKAGES.reduce(
+    (acc, r) => acc + r.parts,
+    0,
+  );
+  const inProduction = PREVIEW_SUPPLIER_JOBS.filter(
+    (j) => (j.status as string) === "in_production",
+  ).length;
+  const complete = PREVIEW_SUPPLIER_JOBS.filter(
+    (j) => (j.status as string) === "complete",
+  ).length;
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Supplier · Manufacturing Partner"
+        title="Partner Dashboard"
+        subtitle="Review assigned work packages, submit quotes, and post production updates."
+        actions={
+          <>
+            <LinkButton href="/supplier/profile" variant="secondary" size="sm">
+              Company Profile
+            </LinkButton>
+            <LinkButton
+              href="/supplier/quote-requests"
+              variant="primary"
+              size="sm"
+            >
+              Open Quote Requests
+            </LinkButton>
+          </>
+        }
+      />
+
+      <PreviewDataBanner reason={previewReason} />
+
+      <KpiGrid>
+        <KpiCard
+          label="Parts Assigned"
+          value={totalParts}
+          sublabel={`${PREVIEW_SUPPLIER_WORK_PACKAGES.length} work packages`}
+          accent="cyan"
+        />
+        <KpiCard
+          label="Quotes Pending"
+          value={PREVIEW_SUPPLIER_WORK_PACKAGES.length}
+          sublabel="Awaiting your response"
+          accent="amber"
+        />
+        <KpiCard
+          label="In Production"
+          value={inProduction}
+          sublabel={`${PREVIEW_SUPPLIER_JOBS.length} total jobs`}
+          accent="emerald"
+        />
+        <KpiCard
+          label="Completed"
+          value={complete}
+          sublabel="This partnership to date"
+          accent="slate"
+        />
+      </KpiGrid>
+
+      <SectionHeader
+        title="Assigned Work Packages"
+        subtitle="Packages you've been invited to quote"
+      />
+      <div className="mb-8 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {PREVIEW_SUPPLIER_WORK_PACKAGES.map((r) => (
+          <Card key={r.id} className="flex flex-col">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-400">
+              Priority {r.priority}
+            </div>
+            <div className="text-sm font-medium text-slate-100">{r.title}</div>
+            <div className="mt-0.5 text-xs text-slate-500">
+              {r.parts} parts · need-by {formatDate(r.need_by)}
+            </div>
+            <p className="mt-3 line-clamp-2 text-xs text-slate-400">
+              {r.description}
+            </p>
+            <div className="mt-4 text-[10px] uppercase tracking-[0.22em] text-amber-300">
+              Preview only
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <SectionHeader
+        title="Active Jobs"
+        subtitle="Production commitments currently under your ownership"
+      />
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {PREVIEW_SUPPLIER_JOBS.map((j) => {
+          const { label, tone } = mapStatus(jobStatusMap, j.status);
+          return (
+            <Card key={j.id}>
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-mono text-xs text-cyan-300">
+                  {j.job_number}
+                </span>
+                <StatusBadge tone={tone}>{label}</StatusBadge>
+              </div>
+              <div className="mt-3">
+                <ProgressBar value={jobStatusToProgress(j.status)} />
+              </div>
+              <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
+                <span>Due {formatDate(j.due_date)}</span>
+                {j.flagged && (
+                  <span className="text-amber-300">⚠ Issue flagged</span>
+                )}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
     </>
   );
 }

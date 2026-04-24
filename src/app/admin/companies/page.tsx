@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { AuthError, requireAsgardAdmin } from "@/lib/auth";
+import { getOptionalUser } from "@/lib/auth";
 import { PageHeader } from "@/components/shell/PageHeader";
 import {
   DataTable,
@@ -14,12 +13,10 @@ import { PREVIEW_COMPANIES } from "@/lib/ui/mock";
 export const dynamic = "force-dynamic";
 
 export default async function AdminCompaniesPage() {
-  try {
-    await requireAsgardAdmin();
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
-  }
+  // UI preview surface — no backend data is loaded. Resolve the user
+  // optionally so the page renders cleanly on environments without a
+  // Supabase session or env vars.
+  await getOptionalUser();
 
   type Row = (typeof PREVIEW_COMPANIES)[number];
 
