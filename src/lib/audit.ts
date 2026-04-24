@@ -4,11 +4,16 @@ export type AuditAction =
   | "supplier_profile.submitted"
   | "supplier_profile.approved"
   | "supplier_profile.rejected"
-  | "supplier_profile.revisions_requested";
+  | "supplier_profile.revisions_requested"
+  | "program.created"
+  | "rfq.created"
+  | "rfq.submitted";
+
+export type AuditEntityType = "supplier_profile" | "program" | "rfq";
 
 export interface AuditEvent {
   action: AuditAction;
-  entity_type: "supplier_profile";
+  entity_type: AuditEntityType;
   entity_id: string;
   user_id: string;
   organization_id: string;
