@@ -101,11 +101,19 @@ Actor: Admin / Quality
 
 ---
 
-### Step 5: Approval
-Actor: Admin
+### Step 5: Decision
+Actor: Asgard Admin
 
-- Approved → Supplier activated  
-- Rejected → Requires correction  
+One of:
+
+- Approve → `approved` (terminal). Supplier is activated and eligible for routing.
+- Reject → `rejected` (terminal). Supplier is not eligible; a new profile must
+  be initiated to re-enter the pipeline.
+- Request revisions → `revisions_requested`. Supplier Admin edits and
+  resubmits, returning to Step 3.
+
+All three outcomes require an audit log entry. `review_notes` may be supplied
+by the reviewer and is stored on the profile plus in the audit log metadata.
 
 ---
 
@@ -431,8 +439,28 @@ draft → routed → in_production → complete
 ## Job
 awarded → scheduled → in_production → inspection → complete  
 
-## Supplier
-draft → submitted → approved  
+## Supplier Profile
+
+```text
+draft ──► submitted ──► under_review ──► approved
+                    │                │
+                    │                ├──► rejected         (terminal)
+                    │                │
+                    └────────────────┴──► revisions_requested ──► draft
+```
+
+Allowed transitions (enforced server-side):
+
+- `draft → submitted` (actor: supplier_admin)
+- `submitted → under_review` (actor: asgard_admin, optional staging step)
+- `submitted → approved | rejected | revisions_requested` (actor: asgard_admin)
+- `under_review → approved | rejected | revisions_requested` (actor: asgard_admin)
+- `revisions_requested → submitted` (actor: supplier_admin, after editing)
+
+`approved` and `rejected` are terminal. Editing is permitted only while the
+profile is in `draft` or `revisions_requested`. Every transition out of
+`submitted` or `under_review` writes an audit log entry with the
+`previous_status` captured in `metadata`.
 
 ---
 
