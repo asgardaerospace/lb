@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { AuthError, requireAsgardAdmin } from "@/lib/auth";
+import { getOptionalUser } from "@/lib/auth";
 import { listAllJobs } from "@/lib/jobs/repository";
 import { PageHeader } from "@/components/shell/PageHeader";
 import {
@@ -11,38 +10,92 @@ import {
   mapStatus,
   jobStatusMap,
   ProgressBar,
+  PreviewDataBanner,
   type Column,
 } from "@/components/ui";
 import { formatDate, jobStatusToProgress } from "@/lib/ui/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminJobsPage() {
+interface JobRow {
+  id: string;
+  job_number: string | null;
+  supplier_organization_id: string;
+  status: string;
+  start_date: string | null;
+  due_date: string | null;
+  completed_date: string | null;
+  last_issue_flagged_at: string | null;
+}
+
+const PREVIEW_JOBS: JobRow[] = [
+  {
+    id: "job-prev-1",
+    job_number: "JOB-0087",
+    supplier_organization_id: "org-prev-1",
+    status: "in_production",
+    start_date: "2026-04-01",
+    due_date: "2026-06-15",
+    completed_date: null,
+    last_issue_flagged_at: null,
+  },
+  {
+    id: "job-prev-2",
+    job_number: "JOB-0091",
+    supplier_organization_id: "org-prev-2",
+    status: "scheduled",
+    start_date: "2026-05-01",
+    due_date: "2026-07-02",
+    completed_date: null,
+    last_issue_flagged_at: null,
+  },
+  {
+    id: "job-prev-3",
+    job_number: "JOB-0092",
+    supplier_organization_id: "org-prev-1",
+    status: "inspection",
+    start_date: "2026-03-15",
+    due_date: "2026-05-20",
+    completed_date: null,
+    last_issue_flagged_at: "2026-04-18T10:00:00Z",
+  },
+];
+
+async function loadJobs(): Promise<JobRow[] | null> {
   try {
-    await requireAsgardAdmin();
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
+    const data = await listAllJobs();
+    return data as unknown as JobRow[];
+  } catch {
+    return null;
   }
+}
 
-  const jobs = await listAllJobs();
+export default async function AdminJobsPage() {
+  const user = await getOptionalUser();
+  const isAdmin = user?.role === "asgard_admin";
+  const live = isAdmin ? await loadJobs() : null;
+  const previewMode = !isAdmin || live === null;
+  const jobs = previewMode ? PREVIEW_JOBS : live!;
 
-  const byStatus = (s: string) =>
-    jobs.filter((j) => j.status === s).length;
+  const byStatus = (s: string) => jobs.filter((j) => j.status === s).length;
 
-  type Row = (typeof jobs)[number];
-  const columns: Column<Row>[] = [
+  const columns: Column<JobRow>[] = [
     {
       key: "job",
       header: "Job",
-      render: (j) => (
-        <Link
-          href={`/admin/jobs/${j.id}`}
-          className="font-mono text-xs text-cyan-300 transition hover:text-cyan-200"
-        >
-          {j.job_number ?? j.id.slice(0, 8)}
-        </Link>
-      ),
+      render: (j) =>
+        previewMode ? (
+          <span className="font-mono text-xs text-slate-400">
+            {j.job_number ?? j.id.slice(0, 8)}
+          </span>
+        ) : (
+          <Link
+            href={`/admin/jobs/${j.id}`}
+            className="font-mono text-xs text-cyan-300 transition hover:text-cyan-200"
+          >
+            {j.job_number ?? j.id.slice(0, 8)}
+          </Link>
+        ),
     },
     {
       key: "supplier",
@@ -57,24 +110,28 @@ export default async function AdminJobsPage() {
       key: "status",
       header: "Status",
       render: (j) => {
-        const { label, tone } = mapStatus(jobStatusMap, j.status as string);
+        const { label, tone } = mapStatus(jobStatusMap, j.status);
         return <StatusBadge tone={tone}>{label}</StatusBadge>;
       },
     },
     {
       key: "progress",
       header: "Progress",
-      render: (j) => <ProgressBar value={jobStatusToProgress(j.status as string)} />,
+      render: (j) => <ProgressBar value={jobStatusToProgress(j.status)} />,
     },
     {
       key: "start",
       header: "Start",
-      render: (j) => <span className="text-slate-400">{formatDate(j.start_date)}</span>,
+      render: (j) => (
+        <span className="text-slate-400">{formatDate(j.start_date)}</span>
+      ),
     },
     {
       key: "due",
       header: "Due",
-      render: (j) => <span className="text-slate-400">{formatDate(j.due_date)}</span>,
+      render: (j) => (
+        <span className="text-slate-400">{formatDate(j.due_date)}</span>
+      ),
     },
     {
       key: "completed",
@@ -106,9 +163,17 @@ export default async function AdminJobsPage() {
         subtitle="All production jobs across suppliers — drill in to status, issues, and delivery."
       />
 
+      {previewMode && (
+        <PreviewDataBanner reason="No asgard_admin session — showing illustrative job rows." />
+      )}
+
       <KpiGrid>
         <KpiCard label="Total jobs" value={jobs.length} accent="cyan" />
-        <KpiCard label="In production" value={byStatus("in_production")} accent="amber" />
+        <KpiCard
+          label="In production"
+          value={byStatus("in_production")}
+          accent="amber"
+        />
         <KpiCard label="Inspection" value={byStatus("inspection")} accent="cyan" />
         <KpiCard label="Complete" value={byStatus("complete")} accent="emerald" />
       </KpiGrid>
@@ -119,6 +184,7 @@ export default async function AdminJobsPage() {
         rowKey={(j) => j.id}
         emptyTitle="No jobs yet"
         emptyBody="Jobs are created when a supplier quote is accepted in the Quote Pipeline."
+        previewBanner={previewMode}
       />
     </>
   );

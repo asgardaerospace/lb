@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { AuthError, requireAsgardAdmin } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { getOptionalUser } from "@/lib/auth";
 import { getQuoteById } from "@/lib/quotes/repository";
 import {
   getWorkPackageById,
@@ -14,6 +14,7 @@ import {
   StatusBadge,
   mapStatus,
   quoteStatusMap,
+  RequiresLiveData,
   type Column,
 } from "@/components/ui";
 import { formatCurrency, formatDateTime } from "@/lib/ui/format";
@@ -25,15 +26,41 @@ export default async function AdminQuoteDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  try {
-    await requireAsgardAdmin();
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
+  const user = await getOptionalUser();
+  const { id } = await params;
+
+  if (user?.role !== "asgard_admin") {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Admin · Quote Review"
+          title={id.slice(0, 8)}
+          subtitle="Quote review requires an authenticated asgard_admin session."
+        />
+        <RequiresLiveData
+          reason="Per-quote detail relies on live Supabase data and the asgard_admin role."
+          backHref="/admin/quotes"
+          backLabel="Back to Quote Pipeline preview"
+        />
+      </>
+    );
   }
 
-  const { id } = await params;
-  const quote = await getQuoteById(id);
+  let quote: Awaited<ReturnType<typeof getQuoteById>> | null = null;
+  try {
+    quote = await getQuoteById(id);
+  } catch {
+    return (
+      <>
+        <PageHeader eyebrow="Admin · Quote Review" title={id.slice(0, 8)} />
+        <RequiresLiveData
+          reason="Could not reach Supabase to load this quote."
+          backHref="/admin/quotes"
+          backLabel="Back to Quote Pipeline"
+        />
+      </>
+    );
+  }
   if (!quote) notFound();
 
   const supabase = await createServerSupabase();
@@ -56,7 +83,9 @@ export default async function AdminQuoteDetailPage({
       key: "pn",
       header: "Part #",
       render: (p) => (
-        <span className="font-mono text-xs text-slate-200">{p.part_number}</span>
+        <span className="font-mono text-xs text-slate-200">
+          {p.part_number}
+        </span>
       ),
     },
     {

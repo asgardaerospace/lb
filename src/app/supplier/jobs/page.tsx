@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { AuthError, requireRole } from "@/lib/auth";
+import { getOptionalUser } from "@/lib/auth";
 import { listJobsForSupplier } from "@/lib/jobs/repository";
 import { PageHeader } from "@/components/shell/PageHeader";
 import {
@@ -11,40 +10,91 @@ import {
   ProgressBar,
   KpiCard,
   KpiGrid,
+  PreviewDataBanner,
   type Column,
 } from "@/components/ui";
 import { formatDate, jobStatusToProgress } from "@/lib/ui/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function SupplierJobsPage() {
-  let user;
-  try {
-    user = await requireRole(["supplier_admin", "supplier_user"]);
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
-  }
+interface JobRow {
+  id: string;
+  job_number: string | null;
+  status: string;
+  start_date: string | null;
+  due_date: string | null;
+  completed_date: string | null;
+  last_issue_flagged_at: string | null;
+}
 
-  const jobs = await listJobsForSupplier(user.organization_id);
+const PREVIEW_JOBS: JobRow[] = [
+  {
+    id: "job-prev-1",
+    job_number: "JOB-0087",
+    status: "in_production",
+    start_date: "2026-04-01",
+    due_date: "2026-06-15",
+    completed_date: null,
+    last_issue_flagged_at: null,
+  },
+  {
+    id: "job-prev-2",
+    job_number: "JOB-0091",
+    status: "scheduled",
+    start_date: "2026-05-01",
+    due_date: "2026-07-02",
+    completed_date: null,
+    last_issue_flagged_at: null,
+  },
+  {
+    id: "job-prev-3",
+    job_number: "JOB-0092",
+    status: "inspection",
+    start_date: "2026-03-15",
+    due_date: "2026-05-20",
+    completed_date: null,
+    last_issue_flagged_at: "2026-04-18T10:00:00Z",
+  },
+];
+
+async function loadJobs(orgId: string): Promise<JobRow[] | null> {
+  try {
+    const data = await listJobsForSupplier(orgId);
+    return data as unknown as JobRow[];
+  } catch {
+    return null;
+  }
+}
+
+export default async function SupplierJobsPage() {
+  const user = await getOptionalUser();
+  const isSupplier =
+    user?.role === "supplier_admin" || user?.role === "supplier_user";
+  const live = isSupplier && user ? await loadJobs(user.organization_id) : null;
+  const previewMode = !isSupplier || live === null;
+  const jobs = previewMode ? PREVIEW_JOBS : live!;
 
   const inProd = jobs.filter((j) => j.status === "in_production").length;
   const insp = jobs.filter((j) => j.status === "inspection").length;
   const complete = jobs.filter((j) => j.status === "complete").length;
 
-  type Row = (typeof jobs)[number];
-  const columns: Column<Row>[] = [
+  const columns: Column<JobRow>[] = [
     {
       key: "job",
       header: "Job",
-      render: (j) => (
-        <Link
-          href={`/supplier/jobs/${j.id}`}
-          className="font-mono text-xs text-cyan-300 transition hover:text-cyan-200"
-        >
-          {j.job_number ?? j.id.slice(0, 8)}
-        </Link>
-      ),
+      render: (j) =>
+        previewMode ? (
+          <span className="font-mono text-xs text-slate-400">
+            {j.job_number ?? j.id.slice(0, 8)}
+          </span>
+        ) : (
+          <Link
+            href={`/supplier/jobs/${j.id}`}
+            className="font-mono text-xs text-cyan-300 transition hover:text-cyan-200"
+          >
+            {j.job_number ?? j.id.slice(0, 8)}
+          </Link>
+        ),
     },
     {
       key: "status",
@@ -62,12 +112,16 @@ export default async function SupplierJobsPage() {
     {
       key: "start",
       header: "Start",
-      render: (j) => <span className="text-slate-400">{formatDate(j.start_date)}</span>,
+      render: (j) => (
+        <span className="text-slate-400">{formatDate(j.start_date)}</span>
+      ),
     },
     {
       key: "due",
       header: "Due",
-      render: (j) => <span className="text-slate-400">{formatDate(j.due_date)}</span>,
+      render: (j) => (
+        <span className="text-slate-400">{formatDate(j.due_date)}</span>
+      ),
     },
     {
       key: "completed",
@@ -99,6 +153,10 @@ export default async function SupplierJobsPage() {
         subtitle="Production commitments owned by your organization — open a job to update status or flag issues."
       />
 
+      {previewMode && (
+        <PreviewDataBanner reason="No supplier session — showing illustrative jobs." />
+      )}
+
       <KpiGrid>
         <KpiCard label="Total jobs" value={jobs.length} accent="cyan" />
         <KpiCard label="In production" value={inProd} accent="amber" />
@@ -111,7 +169,8 @@ export default async function SupplierJobsPage() {
         rows={jobs}
         rowKey={(j) => j.id}
         emptyTitle="No assigned jobs"
-        emptyBody="Accepted quotes become jobs. Once Asgard accepts one of your quotes, the resulting job will appear here."
+        emptyBody="Accepted quotes become jobs."
+        previewBanner={previewMode}
       />
     </>
   );

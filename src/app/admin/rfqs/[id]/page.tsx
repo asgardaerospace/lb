@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { AuthError, requireAsgardAdmin } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { getOptionalUser } from "@/lib/auth";
 import {
   getProgramById,
   getRfqById,
@@ -11,6 +11,7 @@ import {
   StatusBadge,
   mapStatus,
   rfqStatusMap,
+  RequiresLiveData,
   type Column,
 } from "@/components/ui";
 
@@ -21,15 +22,41 @@ export default async function AdminRfqDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  try {
-    await requireAsgardAdmin();
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
+  const user = await getOptionalUser();
+  const { id } = await params;
+
+  if (user?.role !== "asgard_admin") {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Admin · RFQ Detail"
+          title={id.slice(0, 8)}
+          subtitle="RFQ detail requires an authenticated asgard_admin session."
+        />
+        <RequiresLiveData
+          reason="Per-RFQ detail relies on live Supabase data and the asgard_admin role."
+          backHref="/admin/rfqs"
+          backLabel="Back to RFQ Inbox preview"
+        />
+      </>
+    );
   }
 
-  const { id } = await params;
-  const rfq = await getRfqById(id);
+  let rfq: Awaited<ReturnType<typeof getRfqById>> | null = null;
+  try {
+    rfq = await getRfqById(id);
+  } catch {
+    return (
+      <>
+        <PageHeader eyebrow="Admin · RFQ Detail" title={id.slice(0, 8)} />
+        <RequiresLiveData
+          reason="Could not reach Supabase to load this RFQ."
+          backHref="/admin/rfqs"
+          backLabel="Back to RFQ Inbox"
+        />
+      </>
+    );
+  }
   if (!rfq) notFound();
   const [program, parts] = await Promise.all([
     getProgramById(rfq.program_id),
@@ -44,13 +71,17 @@ export default async function AdminRfqDetailPage({
       key: "pn",
       header: "Part #",
       render: (p) => (
-        <span className="font-mono text-xs text-slate-200">{p.part_number}</span>
+        <span className="font-mono text-xs text-slate-200">
+          {p.part_number}
+        </span>
       ),
     },
     {
       key: "name",
       header: "Name",
-      render: (p) => <span className="text-slate-300">{p.part_name ?? "—"}</span>,
+      render: (p) => (
+        <span className="text-slate-300">{p.part_name ?? "—"}</span>
+      ),
     },
     {
       key: "material",

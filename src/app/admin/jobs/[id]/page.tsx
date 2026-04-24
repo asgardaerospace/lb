@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { AuthError, requireAsgardAdmin } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { getOptionalUser } from "@/lib/auth";
 import { getJobById } from "@/lib/jobs/repository";
 import AdminJobActions from "./AdminJobActions";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -9,6 +9,7 @@ import {
   mapStatus,
   jobStatusMap,
   ProgressBar,
+  RequiresLiveData,
 } from "@/components/ui";
 import { formatDate, formatDateTime, jobStatusToProgress } from "@/lib/ui/format";
 
@@ -19,15 +20,41 @@ export default async function AdminJobDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  try {
-    await requireAsgardAdmin();
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
+  const user = await getOptionalUser();
+  const { id } = await params;
+
+  if (user?.role !== "asgard_admin") {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Admin · Job Detail"
+          title={id.slice(0, 8)}
+          subtitle="Job detail screen requires an authenticated asgard_admin session."
+        />
+        <RequiresLiveData
+          reason="Per-job detail relies on live data from Supabase. Sign in as an Asgard admin or open the Job Oversight preview from the Operations Center."
+          backHref="/admin/jobs"
+          backLabel="Back to Jobs preview"
+        />
+      </>
+    );
   }
 
-  const { id } = await params;
-  const job = await getJobById(id);
+  let job: Awaited<ReturnType<typeof getJobById>> | null = null;
+  try {
+    job = await getJobById(id);
+  } catch {
+    return (
+      <>
+        <PageHeader eyebrow="Admin · Job Detail" title={id.slice(0, 8)} />
+        <RequiresLiveData
+          reason="Could not reach Supabase to load this job."
+          backHref="/admin/jobs"
+          backLabel="Back to Jobs"
+        />
+      </>
+    );
+  }
   if (!job) notFound();
 
   const { label, tone } = mapStatus(jobStatusMap, job.status);

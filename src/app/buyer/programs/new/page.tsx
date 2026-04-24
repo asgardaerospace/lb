@@ -1,18 +1,13 @@
-import { redirect } from "next/navigation";
-import { AuthError, requireRole } from "@/lib/auth";
+import { getOptionalUser } from "@/lib/auth";
 import ProgramCreateForm from "./ProgramCreateForm";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { Card } from "@/components/ui";
+import { Card, PreviewDataBanner } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewProgramPage() {
-  try {
-    await requireRole(["buyer_admin", "buyer_user"]);
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
-  }
+  const user = await getOptionalUser();
+  const isBuyer = user?.role === "buyer_admin" || user?.role === "buyer_user";
 
   return (
     <>
@@ -21,6 +16,9 @@ export default async function NewProgramPage() {
         title="Submit Program"
         subtitle="Define a new aerospace program and establish system-level manufacturing context. The program becomes the parent container for RFQs, parts, and production activity."
       />
+      {!isBuyer && (
+        <PreviewDataBanner reason="No buyer session — form below renders for layout review but submissions will be rejected by the API." />
+      )}
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         <Card>
           <ProgramCreateForm />
@@ -32,16 +30,23 @@ export default async function NewProgramPage() {
             </div>
             <ul className="space-y-2 text-xs text-slate-400">
               <li>
-                <span className="font-medium text-slate-300">1 · Program created —</span>{" "}
+                <span className="font-medium text-slate-300">
+                  1 · Program created —
+                </span>{" "}
                 becomes the parent record for RFQs you submit.
               </li>
               <li>
-                <span className="font-medium text-slate-300">2 · Submit RFQs —</span>{" "}
+                <span className="font-medium text-slate-300">
+                  2 · Submit RFQs —
+                </span>{" "}
                 attach parts, quantities, and delivery requirements.
               </li>
               <li>
-                <span className="font-medium text-slate-300">3 · Asgard routes —</span>{" "}
-                Launchbelt&apos;s routing console matches suppliers and requests quotes.
+                <span className="font-medium text-slate-300">
+                  3 · Asgard routes —
+                </span>{" "}
+                Launchbelt&apos;s routing console matches suppliers and
+                requests quotes.
               </li>
               <li>
                 <span className="font-medium text-slate-300">4 · Production —</span>{" "}
@@ -54,7 +59,8 @@ export default async function NewProgramPage() {
               Compliance reminder
             </div>
             <p className="text-xs text-slate-400">
-              Mark ITAR / CUI controls accurately. These flags gate which suppliers the routing engine is allowed to consider.
+              Mark ITAR / CUI controls accurately. These flags gate which
+              suppliers the routing engine is allowed to consider.
             </p>
           </Card>
         </aside>

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { AuthError, requireRole } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { getOptionalUser } from "@/lib/auth";
 import {
   getProgramById,
   listRfqsForProgram,
@@ -10,6 +10,7 @@ import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
 import {
   Card,
   DataTable,
+  RequiresLiveData,
   StatusBadge,
   mapStatus,
   rfqStatusMap,
@@ -24,16 +25,43 @@ export default async function ProgramDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  let user;
-  try {
-    user = await requireRole(["buyer_admin", "buyer_user"]);
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
+  const user = await getOptionalUser();
+  const { id } = await params;
+  const isBuyer = user?.role === "buyer_admin" || user?.role === "buyer_user";
+
+  if (!isBuyer || !user) {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Buyer · Program Detail"
+          title={id.slice(0, 8)}
+          subtitle="Program detail requires an authenticated buyer session."
+        />
+        <RequiresLiveData
+          reason="Program detail relies on live Supabase data scoped to your buyer organization."
+          backHref="/buyer/programs"
+          backLabel="Back to Programs preview"
+        />
+      </>
+    );
   }
 
-  const { id } = await params;
-  const program = await getProgramById(id);
+  let program: Awaited<ReturnType<typeof getProgramById>> | null = null;
+  try {
+    program = await getProgramById(id);
+  } catch {
+    return (
+      <>
+        <PageHeader eyebrow="Buyer · Program Detail" title={id.slice(0, 8)} />
+        <RequiresLiveData
+          reason="Could not reach Supabase to load this program."
+          backHref="/buyer/programs"
+          backLabel="Back to Programs"
+        />
+      </>
+    );
+  }
+
   if (!program || program.buyer_organization_id !== user.organization_id) {
     notFound();
   }

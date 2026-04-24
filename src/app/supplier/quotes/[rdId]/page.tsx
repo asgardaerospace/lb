@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { AuthError, requireRole } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { getOptionalUser } from "@/lib/auth";
 import { loadRequestForSupplier } from "@/lib/quotes/access";
 import { getQuoteFor } from "@/lib/quotes/repository";
 import { listPartsForWorkPackage } from "@/lib/routing/repository";
@@ -9,11 +9,13 @@ import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
 import {
   Card,
   DataTable,
+  RequiresLiveData,
   StatusBadge,
   WorkflowStepper,
   type Column,
 } from "@/components/ui";
 import { formatDate } from "@/lib/ui/format";
+import { AuthError } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -22,15 +24,28 @@ export default async function SupplierQuoteDetailPage({
 }: {
   params: Promise<{ rdId: string }>;
 }) {
-  let user;
-  try {
-    user = await requireRole(["supplier_admin", "supplier_user"]);
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
+  const user = await getOptionalUser();
+  const { rdId } = await params;
+  const isSupplier =
+    user?.role === "supplier_admin" || user?.role === "supplier_user";
+
+  if (!isSupplier || !user) {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Supplier · Quote"
+          title="Quote response"
+          subtitle="Quote response requires an authenticated supplier session."
+        />
+        <RequiresLiveData
+          reason="Routing decisions are scoped to your supplier organization. Sign in to load this quote request."
+          backHref="/supplier/quotes"
+          backLabel="Back to Quotes preview"
+        />
+      </>
+    );
   }
 
-  const { rdId } = await params;
   let rd;
   try {
     rd = await loadRequestForSupplier(rdId, user.organization_id);
@@ -38,7 +53,16 @@ export default async function SupplierQuoteDetailPage({
     if (err instanceof AuthError && (err.status === 403 || err.status === 404)) {
       notFound();
     }
-    throw err;
+    return (
+      <>
+        <PageHeader eyebrow="Supplier · Quote" title="Quote response" />
+        <RequiresLiveData
+          reason="Could not reach Supabase to load this routing decision."
+          backHref="/supplier/quotes"
+          backLabel="Back to Quotes"
+        />
+      </>
+    );
   }
 
   const supabase = await createServerSupabase();
@@ -81,7 +105,9 @@ export default async function SupplierQuoteDetailPage({
       key: "pn",
       header: "Part #",
       render: (p) => (
-        <span className="font-mono text-xs text-slate-200">{p.part_number}</span>
+        <span className="font-mono text-xs text-slate-200">
+          {p.part_number}
+        </span>
       ),
     },
     {

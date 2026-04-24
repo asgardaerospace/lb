@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { AuthError, requireRole } from "@/lib/auth";
+import { getOptionalUser } from "@/lib/auth";
 import { listQuoteRequestsForSupplier } from "@/lib/routing/repository";
 import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
 import {
@@ -8,22 +7,35 @@ import {
   EmptyState,
   LinkButton,
   DataTable,
+  PreviewDataBanner,
   type Column,
 } from "@/components/ui";
 import { formatDate, formatDateTime } from "@/lib/ui/format";
+import { PREVIEW_SUPPLIER_WORK_PACKAGES } from "@/lib/ui/mock";
 
 export const dynamic = "force-dynamic";
 
-export default async function SupplierQuoteRequestsPage() {
-  let user;
-  try {
-    user = await requireRole(["supplier_admin", "supplier_user"]);
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
-  }
+type LiveRequest = Awaited<
+  ReturnType<typeof listQuoteRequestsForSupplier>
+>[number];
 
-  const requests = await listQuoteRequestsForSupplier(user.organization_id);
+async function loadRequests(orgId: string): Promise<LiveRequest[] | null> {
+  try {
+    return await listQuoteRequestsForSupplier(orgId);
+  } catch {
+    return null;
+  }
+}
+
+export default async function SupplierQuoteRequestsPage() {
+  const user = await getOptionalUser();
+  const isSupplier =
+    user?.role === "supplier_admin" || user?.role === "supplier_user";
+
+  const live = isSupplier && user
+    ? await loadRequests(user.organization_id)
+    : null;
+  const previewMode = !isSupplier || live === null;
 
   return (
     <>
@@ -33,14 +45,39 @@ export default async function SupplierQuoteRequestsPage() {
         subtitle="Work packages routed to your organization for quoting."
       />
 
-      {requests.length === 0 ? (
+      {previewMode ? (
+        <>
+          <PreviewDataBanner reason="No supplier session — showing illustrative work packages so the layout can be reviewed." />
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {PREVIEW_SUPPLIER_WORK_PACKAGES.map((r) => (
+              <Card key={r.id} className="flex flex-col">
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-400">
+                  Priority {r.priority}
+                </div>
+                <div className="text-sm font-medium text-slate-100">
+                  {r.title}
+                </div>
+                <div className="mt-0.5 text-xs text-slate-500">
+                  {r.parts} parts · need-by {formatDate(r.need_by)}
+                </div>
+                <p className="mt-3 line-clamp-3 text-xs text-slate-400">
+                  {r.description}
+                </p>
+                <div className="mt-4 text-[10px] uppercase tracking-[0.22em] text-amber-300">
+                  Preview only
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      ) : live!.length === 0 ? (
         <EmptyState
           title="No active quote requests"
           body="When an Asgard operator routes a work package to your organization it will appear here."
         />
       ) : (
         <div className="space-y-5">
-          {requests.map((r) => {
+          {live!.map((r) => {
             const priorityTone =
               r.rfq_priority === "urgent"
                 ? "danger"
@@ -70,13 +107,17 @@ export default async function SupplierQuoteRequestsPage() {
               {
                 key: "material",
                 header: "Material",
-                render: (p) => <span className="text-slate-400">{p.material ?? "—"}</span>,
+                render: (p) => (
+                  <span className="text-slate-400">{p.material ?? "—"}</span>
+                ),
               },
               {
                 key: "process",
                 header: "Process",
                 render: (p) => (
-                  <span className="text-slate-400">{p.process_required ?? "—"}</span>
+                  <span className="text-slate-400">
+                    {p.process_required ?? "—"}
+                  </span>
                 ),
               },
               {
@@ -84,7 +125,9 @@ export default async function SupplierQuoteRequestsPage() {
                 header: "Qty",
                 align: "right",
                 render: (p) => (
-                  <span className="tabular-nums text-slate-300">{p.quantity ?? "—"}</span>
+                  <span className="tabular-nums text-slate-300">
+                    {p.quantity ?? "—"}
+                  </span>
                 ),
               },
             ];

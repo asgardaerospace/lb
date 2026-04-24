@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { AuthError, requireRole } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { getOptionalUser } from "@/lib/auth";
 import { getJobById } from "@/lib/jobs/repository";
 import SupplierJobActions from "./SupplierJobActions";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -9,6 +9,7 @@ import {
   mapStatus,
   jobStatusMap,
   ProgressBar,
+  RequiresLiveData,
 } from "@/components/ui";
 import { formatDate, formatDateTime, jobStatusToProgress } from "@/lib/ui/format";
 
@@ -19,16 +20,44 @@ export default async function SupplierJobDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  let user;
-  try {
-    user = await requireRole(["supplier_admin", "supplier_user"]);
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
+  const user = await getOptionalUser();
+  const { id } = await params;
+  const isSupplier =
+    user?.role === "supplier_admin" || user?.role === "supplier_user";
+
+  if (!isSupplier || !user) {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Supplier · Job Detail"
+          title={id.slice(0, 8)}
+          subtitle="Job detail requires an authenticated supplier session."
+        />
+        <RequiresLiveData
+          reason="Per-job detail relies on live Supabase data scoped to your supplier organization."
+          backHref="/supplier/jobs"
+          backLabel="Back to Jobs preview"
+        />
+      </>
+    );
   }
 
-  const { id } = await params;
-  const job = await getJobById(id);
+  let job: Awaited<ReturnType<typeof getJobById>> | null = null;
+  try {
+    job = await getJobById(id);
+  } catch {
+    return (
+      <>
+        <PageHeader eyebrow="Supplier · Job Detail" title={id.slice(0, 8)} />
+        <RequiresLiveData
+          reason="Could not reach Supabase to load this job."
+          backHref="/supplier/jobs"
+          backLabel="Back to Jobs"
+        />
+      </>
+    );
+  }
+
   if (!job || job.supplier_organization_id !== user.organization_id) {
     notFound();
   }

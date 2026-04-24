@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { AuthError, requireAsgardAdmin } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { getOptionalUser } from "@/lib/auth";
 import { listPartsForRfq } from "@/lib/rfq/repository";
 import {
   getWorkPackageById,
@@ -9,7 +9,12 @@ import {
 } from "@/lib/routing/repository";
 import WorkPackageDetail from "./WorkPackageDetail";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { Card, StatusBadge, WorkflowStepper } from "@/components/ui";
+import {
+  Card,
+  RequiresLiveData,
+  StatusBadge,
+  WorkflowStepper,
+} from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +23,41 @@ export default async function WorkPackagePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  try {
-    await requireAsgardAdmin();
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
+  const user = await getOptionalUser();
+  const { id } = await params;
+
+  if (user?.role !== "asgard_admin") {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Admin · Work Package"
+          title={id.slice(0, 8)}
+          subtitle="Work package detail requires an authenticated asgard_admin session."
+        />
+        <RequiresLiveData
+          reason="Work package routing relies on live Supabase data and the asgard_admin role."
+          backHref="/admin/routing"
+          backLabel="Back to Routing Queue preview"
+        />
+      </>
+    );
   }
 
-  const { id } = await params;
-  const wp = await getWorkPackageById(id);
+  let wp: Awaited<ReturnType<typeof getWorkPackageById>> | null = null;
+  try {
+    wp = await getWorkPackageById(id);
+  } catch {
+    return (
+      <>
+        <PageHeader eyebrow="Admin · Work Package" title={id.slice(0, 8)} />
+        <RequiresLiveData
+          reason="Could not reach Supabase to load this work package."
+          backHref="/admin/routing"
+          backLabel="Back to Routing Queue"
+        />
+      </>
+    );
+  }
   if (!wp) notFound();
 
   const [attachedParts, rfqParts, candidates, decisions] = await Promise.all([

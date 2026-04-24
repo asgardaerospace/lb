@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { AuthError, requireRole } from "@/lib/auth";
+import { getOptionalUser } from "@/lib/auth";
 import { getProfileForOrg } from "@/lib/supplier-profile/repository";
 import SupplierProfileForm from "./SupplierProfileForm";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -8,25 +7,32 @@ import {
   mapStatus,
   supplierStatusMap,
   Card,
+  PreviewDataBanner,
 } from "@/components/ui";
+import type { SupplierProfile } from "@/lib/supplier-profile/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function SupplierProfilePage() {
-  let user;
+async function loadProfile(orgId: string): Promise<SupplierProfile | null> {
   try {
-    user = await requireRole(["supplier_admin", "supplier_user"]);
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
+    return await getProfileForOrg(orgId);
+  } catch {
+    return null;
   }
+}
 
-  const profile = await getProfileForOrg(user.organization_id);
-  const canEdit = user.role === "supplier_admin";
-  const { label, tone } = mapStatus(
-    supplierStatusMap,
-    profile?.approval_status ?? "draft",
-  );
+export default async function SupplierProfilePage() {
+  const user = await getOptionalUser();
+  const isSupplier =
+    user?.role === "supplier_admin" || user?.role === "supplier_user";
+
+  const profile =
+    isSupplier && user ? await loadProfile(user.organization_id) : null;
+  const canEdit = user?.role === "supplier_admin";
+  const previewMode = !isSupplier;
+
+  const status = profile?.approval_status ?? "draft";
+  const { label, tone } = mapStatus(supplierStatusMap, status);
 
   return (
     <>
@@ -36,8 +42,14 @@ export default async function SupplierProfilePage() {
         subtitle="Maintain your organization's manufacturing capability, compliance evidence, and review metadata."
         actions={<StatusBadge tone={tone}>{label}</StatusBadge>}
       />
+      {previewMode && (
+        <PreviewDataBanner reason="No supplier session — the form below is read-only and will not persist changes." />
+      )}
       <Card>
-        <SupplierProfileForm initial={profile} canEdit={canEdit} />
+        <SupplierProfileForm
+          initial={profile}
+          canEdit={!previewMode && canEdit}
+        />
       </Card>
     </>
   );

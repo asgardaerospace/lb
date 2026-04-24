@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { AuthError, requireAsgardAdmin } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { getOptionalUser } from "@/lib/auth";
 import { getRfqById, listPartsForRfq } from "@/lib/rfq/repository";
 import { listWorkPackagesForRfq } from "@/lib/routing/repository";
 import WorkPackageCreateForm from "./WorkPackageCreateForm";
@@ -11,9 +11,10 @@ import {
   StatusBadge,
   mapStatus,
   rfqStatusMap,
+  RequiresLiveData,
+  WorkflowStepper,
   type Column,
 } from "@/components/ui";
-import { WorkflowStepper } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -22,15 +23,41 @@ export default async function RoutingRfqPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  try {
-    await requireAsgardAdmin();
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
+  const user = await getOptionalUser();
+  const { id } = await params;
+
+  if (user?.role !== "asgard_admin") {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Admin · Routing Engine"
+          title={id.slice(0, 8)}
+          subtitle="Routing engine requires an authenticated asgard_admin session."
+        />
+        <RequiresLiveData
+          reason="The routing engine builds on live work-package, candidate-supplier, and routing-decision data from Supabase."
+          backHref="/admin/routing"
+          backLabel="Back to Routing Queue preview"
+        />
+      </>
+    );
   }
 
-  const { id } = await params;
-  const rfq = await getRfqById(id);
+  let rfq: Awaited<ReturnType<typeof getRfqById>> | null = null;
+  try {
+    rfq = await getRfqById(id);
+  } catch {
+    return (
+      <>
+        <PageHeader eyebrow="Admin · Routing Engine" title={id.slice(0, 8)} />
+        <RequiresLiveData
+          reason="Could not reach Supabase to load this RFQ."
+          backHref="/admin/routing"
+          backLabel="Back to Routing Queue"
+        />
+      </>
+    );
+  }
   if (!rfq) notFound();
 
   const [parts, packages] = await Promise.all([
@@ -46,13 +73,17 @@ export default async function RoutingRfqPage({
       key: "pn",
       header: "Part #",
       render: (p) => (
-        <span className="font-mono text-xs text-slate-200">{p.part_number}</span>
+        <span className="font-mono text-xs text-slate-200">
+          {p.part_number}
+        </span>
       ),
     },
     {
       key: "name",
       header: "Name",
-      render: (p) => <span className="text-slate-300">{p.part_name ?? "—"}</span>,
+      render: (p) => (
+        <span className="text-slate-300">{p.part_name ?? "—"}</span>
+      ),
     },
     {
       key: "material",
@@ -102,7 +133,10 @@ export default async function RoutingRfqPage({
         />
       </div>
 
-      <SectionHeader title={`Parts (${parts.length})`} subtitle="Scope of work defined by the buyer" />
+      <SectionHeader
+        title={`Parts (${parts.length})`}
+        subtitle="Scope of work defined by the buyer"
+      />
       <div className="mb-6">
         <DataTable
           columns={partCols}
@@ -150,7 +184,10 @@ export default async function RoutingRfqPage({
         )}
       </div>
 
-      <SectionHeader title="Create work package" subtitle="Group parts and attach candidate suppliers" />
+      <SectionHeader
+        title="Create work package"
+        subtitle="Group parts and attach candidate suppliers"
+      />
       <Card>
         <WorkPackageCreateForm rfqId={id} />
       </Card>

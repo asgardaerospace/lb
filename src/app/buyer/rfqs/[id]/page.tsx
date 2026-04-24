@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { AuthError, requireRole } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { getOptionalUser, AuthError } from "@/lib/auth";
 import { loadRfqForOrg } from "@/lib/rfq/access";
 import {
   getProgramById,
@@ -9,6 +9,7 @@ import RfqEditor from "./RfqEditor";
 import { PageHeader } from "@/components/shell/PageHeader";
 import {
   Card,
+  RequiresLiveData,
   StatusBadge,
   mapStatus,
   rfqStatusMap,
@@ -22,15 +23,27 @@ export default async function RfqPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  let user;
-  try {
-    user = await requireRole(["buyer_admin", "buyer_user"]);
-  } catch (err) {
-    if (err instanceof AuthError && err.status === 401) redirect("/");
-    throw err;
+  const user = await getOptionalUser();
+  const { id } = await params;
+  const isBuyer = user?.role === "buyer_admin" || user?.role === "buyer_user";
+
+  if (!isBuyer || !user) {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Buyer · RFQ"
+          title={id.slice(0, 8)}
+          subtitle="RFQ detail requires an authenticated buyer session."
+        />
+        <RequiresLiveData
+          reason="RFQ detail relies on live Supabase data scoped to your buyer organization."
+          backHref="/buyer/rfqs"
+          backLabel="Back to RFQs preview"
+        />
+      </>
+    );
   }
 
-  const { id } = await params;
   let rfq;
   try {
     rfq = await loadRfqForOrg(id, user.organization_id);
@@ -38,7 +51,16 @@ export default async function RfqPage({
     if (err instanceof AuthError && (err.status === 403 || err.status === 404)) {
       notFound();
     }
-    throw err;
+    return (
+      <>
+        <PageHeader eyebrow="Buyer · RFQ" title={id.slice(0, 8)} />
+        <RequiresLiveData
+          reason="Could not reach Supabase to load this RFQ."
+          backHref="/buyer/rfqs"
+          backLabel="Back to RFQs"
+        />
+      </>
+    );
   }
   const [program, parts] = await Promise.all([
     getProgramById(rfq.program_id),
