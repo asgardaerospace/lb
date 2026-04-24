@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AuthError, requireAsgardAdmin } from "@/lib/auth";
 import {
@@ -6,6 +5,14 @@ import {
   getRfqById,
   listPartsForRfq,
 } from "@/lib/rfq/repository";
+import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
+import {
+  DataTable,
+  StatusBadge,
+  mapStatus,
+  rfqStatusMap,
+  type Column,
+} from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -29,49 +36,71 @@ export default async function AdminRfqDetailPage({
     listPartsForRfq(id),
   ]);
 
-  return (
-    <main className="mx-auto max-w-4xl p-8">
-      <Link href="/admin/rfqs" className="text-sm text-gray-500 underline">
-        ← Submitted RFQs
-      </Link>
-      <h1 className="mt-2 text-2xl font-semibold">{rfq.rfq_title}</h1>
-      <p className="mb-6 text-sm text-gray-600">
-        Status <span className="font-mono">{rfq.status}</span> · priority {rfq.priority}
-        {program ? ` · program ${program.program_name}` : ""}
-        {program?.itar_controlled ? " · ITAR" : ""}
-        {program?.cui_controlled ? " · CUI" : ""}
-      </p>
-      {rfq.description ? (
-        <p className="mb-6 text-sm">{rfq.description}</p>
-      ) : null}
+  const { label, tone } = mapStatus(rfqStatusMap, rfq.status);
 
-      <h2 className="mb-3 text-lg font-medium">Parts ({parts.length})</h2>
-      {parts.length === 0 ? (
-        <p className="text-sm text-gray-600">No parts on this RFQ.</p>
-      ) : (
-        <table className="w-full text-left text-sm">
-          <thead className="border-b">
-            <tr>
-              <th className="py-2">Part #</th>
-              <th className="py-2">Name</th>
-              <th className="py-2">Material</th>
-              <th className="py-2">Process</th>
-              <th className="py-2">Qty</th>
-            </tr>
-          </thead>
-          <tbody>
-            {parts.map((p) => (
-              <tr key={p.id} className="border-b">
-                <td className="py-2 font-mono text-xs">{p.part_number}</td>
-                <td className="py-2">{p.part_name ?? "—"}</td>
-                <td className="py-2">{p.material ?? "—"}</td>
-                <td className="py-2">{p.process_required ?? "—"}</td>
-                <td className="py-2">{p.quantity ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </main>
+  type Part = (typeof parts)[number];
+  const columns: Column<Part>[] = [
+    {
+      key: "pn",
+      header: "Part #",
+      render: (p) => (
+        <span className="font-mono text-xs text-slate-200">{p.part_number}</span>
+      ),
+    },
+    {
+      key: "name",
+      header: "Name",
+      render: (p) => <span className="text-slate-300">{p.part_name ?? "—"}</span>,
+    },
+    {
+      key: "material",
+      header: "Material",
+      render: (p) => <span className="text-slate-400">{p.material ?? "—"}</span>,
+    },
+    {
+      key: "process",
+      header: "Process",
+      render: (p) => (
+        <span className="text-slate-400">{p.process_required ?? "—"}</span>
+      ),
+    },
+    {
+      key: "qty",
+      header: "Qty",
+      align: "right",
+      render: (p) => (
+        <span className="tabular-nums text-slate-300">{p.quantity ?? "—"}</span>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <PageHeader
+        eyebrow={`Admin · RFQ${program ? ` · ${program.program_name}` : ""}`}
+        title={rfq.rfq_title}
+        subtitle={rfq.description ?? undefined}
+        actions={
+          <div className="flex gap-1.5">
+            <StatusBadge tone={tone}>{label}</StatusBadge>
+            <StatusBadge tone="info">{rfq.priority}</StatusBadge>
+            {program?.itar_controlled && (
+              <StatusBadge tone="warn">ITAR</StatusBadge>
+            )}
+            {program?.cui_controlled && (
+              <StatusBadge tone="warn">CUI</StatusBadge>
+            )}
+          </div>
+        }
+      />
+
+      <SectionHeader title={`Parts (${parts.length})`} />
+      <DataTable
+        columns={columns}
+        rows={parts}
+        rowKey={(p) => p.id}
+        emptyTitle="No parts on this RFQ"
+      />
+    </>
   );
 }

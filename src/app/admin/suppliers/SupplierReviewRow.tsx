@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { SupplierProfile } from "@/lib/supplier-profile/types";
+import { StatusBadge, mapStatus, supplierStatusMap, Button } from "@/components/ui";
 
 type Action = "approve" | "reject" | "request-revisions";
 
@@ -10,6 +11,12 @@ const LABEL: Record<Action, string> = {
   approve: "Approve",
   reject: "Reject",
   "request-revisions": "Request revisions",
+};
+
+const VARIANT: Record<Action, "primary" | "danger" | "secondary"> = {
+  approve: "primary",
+  reject: "danger",
+  "request-revisions": "secondary",
 };
 
 export default function SupplierReviewRow({
@@ -49,25 +56,41 @@ export default function SupplierReviewRow({
     profile.iso9001_certified ? "ISO9001" : null,
     profile.itar_registered ? "ITAR" : null,
     profile.cmmc_status !== "none" ? `CMMC:${profile.cmmc_status}` : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  ].filter(Boolean);
+
+  const { label, tone } = mapStatus(supplierStatusMap, profile.approval_status);
 
   return (
-    <tr className="border-b align-top">
-      <td className="py-3 font-mono text-xs">{profile.organization_id}</td>
-      <td className="py-3">{profile.approval_status}</td>
-      <td className="py-3">
+    <tr className="align-top">
+      <td className="px-4 py-3 font-mono text-xs text-slate-400">
+        {profile.organization_id.slice(0, 8)}
+      </td>
+      <td className="px-4 py-3">
+        <StatusBadge tone={tone}>{label}</StatusBadge>
+      </td>
+      <td className="px-4 py-3 text-xs text-slate-400">
         {profile.submitted_at
           ? new Date(profile.submitted_at).toLocaleString()
           : "—"}
       </td>
-      <td className="py-3 text-xs">{compliance || "—"}</td>
-      <td className="py-3">
+      <td className="px-4 py-3">
+        {compliance.length === 0 ? (
+          <span className="text-xs text-slate-500">—</span>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {compliance.map((c) => (
+              <StatusBadge key={c!} tone="info" dot={false}>
+                {c}
+              </StatusBadge>
+            ))}
+          </div>
+        )}
+      </td>
+      <td className="px-4 py-3">
         <div className="space-y-2">
           <textarea
             placeholder="Review notes (optional)"
-            className="w-64 rounded border px-2 py-1 text-xs"
+            className="w-72 rounded-md border px-3 py-2 text-xs"
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -75,19 +98,19 @@ export default function SupplierReviewRow({
           <div className="flex flex-wrap gap-2">
             {(["approve", "reject", "request-revisions"] as Action[]).map(
               (a) => (
-                <button
+                <Button
                   key={a}
-                  type="button"
+                  size="sm"
+                  variant={VARIANT[a]}
                   onClick={() => act(a)}
                   disabled={busy !== null}
-                  className="rounded border px-2 py-1 text-xs disabled:opacity-50"
                 >
                   {busy === a ? "…" : LABEL[a]}
-                </button>
+                </Button>
               ),
             )}
           </div>
-          {error ? <p className="text-xs text-red-600">{error}</p> : null}
+          {error ? <p className="text-xs text-rose-400">{error}</p> : null}
         </div>
       </td>
     </tr>

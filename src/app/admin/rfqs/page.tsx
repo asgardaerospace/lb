@@ -2,6 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthError, requireAsgardAdmin } from "@/lib/auth";
 import { listRfqsByStatus } from "@/lib/rfq/repository";
+import { PageHeader } from "@/components/shell/PageHeader";
+import {
+  DataTable,
+  StatusBadge,
+  mapStatus,
+  rfqStatusMap,
+  type Column,
+} from "@/components/ui";
+import { formatDate, formatDateTime } from "@/lib/ui/format";
 
 export const dynamic = "force-dynamic";
 
@@ -15,43 +24,65 @@ export default async function AdminRfqsPage() {
 
   const rfqs = await listRfqsByStatus(["submitted"]);
 
+  type Row = (typeof rfqs)[number];
+  const columns: Column<Row>[] = [
+    {
+      key: "title",
+      header: "RFQ",
+      render: (r) => (
+        <Link
+          href={`/admin/rfqs/${r.id}`}
+          className="font-medium text-slate-100 transition hover:text-cyan-300"
+        >
+          {r.rfq_title}
+        </Link>
+      ),
+    },
+    {
+      key: "priority",
+      header: "Priority",
+      render: (r) => <StatusBadge tone="info">{r.priority}</StatusBadge>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => {
+        const { label, tone } = mapStatus(rfqStatusMap, r.status as string);
+        return <StatusBadge tone={tone}>{label}</StatusBadge>;
+      },
+    },
+    {
+      key: "qty",
+      header: "Qty",
+      align: "right",
+      render: (r) => <span className="tabular-nums text-slate-400">{r.quantity ?? "—"}</span>,
+    },
+    {
+      key: "need",
+      header: "Need-by",
+      render: (r) => <span className="text-slate-400">{formatDate(r.required_delivery_date)}</span>,
+    },
+    {
+      key: "submitted",
+      header: "Submitted",
+      render: (r) => <span className="text-slate-500">{formatDateTime(r.submitted_at)}</span>,
+    },
+  ];
+
   return (
-    <main className="mx-auto max-w-5xl p-8">
-      <h1 className="mb-6 text-2xl font-semibold">Submitted RFQs</h1>
-      {rfqs.length === 0 ? (
-        <p className="text-sm text-gray-600">No submitted RFQs.</p>
-      ) : (
-        <table className="w-full text-left text-sm">
-          <thead className="border-b">
-            <tr>
-              <th className="py-2">Title</th>
-              <th className="py-2">Priority</th>
-              <th className="py-2">Qty</th>
-              <th className="py-2">Need-by</th>
-              <th className="py-2">Submitted</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rfqs.map((r) => (
-              <tr key={r.id} className="border-b">
-                <td className="py-2">
-                  <Link href={`/admin/rfqs/${r.id}`} className="underline">
-                    {r.rfq_title}
-                  </Link>
-                </td>
-                <td className="py-2">{r.priority}</td>
-                <td className="py-2">{r.quantity ?? "—"}</td>
-                <td className="py-2">{r.required_delivery_date ?? "—"}</td>
-                <td className="py-2">
-                  {r.submitted_at
-                    ? new Date(r.submitted_at).toLocaleString()
-                    : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </main>
+    <>
+      <PageHeader
+        eyebrow="Admin · RFQ Inbox"
+        title="Submitted RFQs"
+        subtitle="All RFQs submitted by buyers that are ready to be triaged into work packages."
+      />
+      <DataTable
+        columns={columns}
+        rows={rfqs}
+        rowKey={(r) => r.id}
+        emptyTitle="No submitted RFQs"
+        emptyBody="Buyers have not submitted new RFQs. The Routing Queue shows RFQs already being worked."
+      />
+    </>
   );
 }

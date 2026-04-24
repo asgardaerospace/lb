@@ -2,6 +2,18 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthError, requireAsgardAdmin } from "@/lib/auth";
 import { listAllJobs } from "@/lib/jobs/repository";
+import { PageHeader } from "@/components/shell/PageHeader";
+import {
+  DataTable,
+  KpiCard,
+  KpiGrid,
+  StatusBadge,
+  mapStatus,
+  jobStatusMap,
+  ProgressBar,
+  type Column,
+} from "@/components/ui";
+import { formatDate, jobStatusToProgress } from "@/lib/ui/format";
 
 export const dynamic = "force-dynamic";
 
@@ -15,47 +27,99 @@ export default async function AdminJobsPage() {
 
   const jobs = await listAllJobs();
 
+  const byStatus = (s: string) =>
+    jobs.filter((j) => j.status === s).length;
+
+  type Row = (typeof jobs)[number];
+  const columns: Column<Row>[] = [
+    {
+      key: "job",
+      header: "Job",
+      render: (j) => (
+        <Link
+          href={`/admin/jobs/${j.id}`}
+          className="font-mono text-xs text-cyan-300 transition hover:text-cyan-200"
+        >
+          {j.job_number ?? j.id.slice(0, 8)}
+        </Link>
+      ),
+    },
+    {
+      key: "supplier",
+      header: "Supplier org",
+      render: (j) => (
+        <span className="font-mono text-xs text-slate-400">
+          {j.supplier_organization_id.slice(0, 8)}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (j) => {
+        const { label, tone } = mapStatus(jobStatusMap, j.status as string);
+        return <StatusBadge tone={tone}>{label}</StatusBadge>;
+      },
+    },
+    {
+      key: "progress",
+      header: "Progress",
+      render: (j) => <ProgressBar value={jobStatusToProgress(j.status as string)} />,
+    },
+    {
+      key: "start",
+      header: "Start",
+      render: (j) => <span className="text-slate-400">{formatDate(j.start_date)}</span>,
+    },
+    {
+      key: "due",
+      header: "Due",
+      render: (j) => <span className="text-slate-400">{formatDate(j.due_date)}</span>,
+    },
+    {
+      key: "completed",
+      header: "Completed",
+      render: (j) => (
+        <span className="text-slate-400">{formatDate(j.completed_date)}</span>
+      ),
+    },
+    {
+      key: "issue",
+      header: "Issue",
+      align: "center",
+      render: (j) =>
+        j.last_issue_flagged_at ? (
+          <StatusBadge tone="warn" dot={false}>
+            ⚠
+          </StatusBadge>
+        ) : (
+          <span className="text-slate-600">—</span>
+        ),
+    },
+  ];
+
   return (
-    <main className="mx-auto max-w-6xl p-8">
-      <h1 className="mb-6 text-2xl font-semibold">Jobs</h1>
-      {jobs.length === 0 ? (
-        <p className="text-sm text-gray-600">No jobs.</p>
-      ) : (
-        <table className="w-full text-left text-sm">
-          <thead className="border-b">
-            <tr>
-              <th className="py-2">Job</th>
-              <th className="py-2">Supplier org</th>
-              <th className="py-2">Status</th>
-              <th className="py-2">Start</th>
-              <th className="py-2">Due</th>
-              <th className="py-2">Completed</th>
-              <th className="py-2">Issue</th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs.map((j) => (
-              <tr key={j.id} className="border-b">
-                <td className="py-2 font-mono text-xs">
-                  <Link href={`/admin/jobs/${j.id}`} className="underline">
-                    {j.job_number ?? j.id.slice(0, 8)}
-                  </Link>
-                </td>
-                <td className="py-2 font-mono text-xs">
-                  {j.supplier_organization_id.slice(0, 8)}
-                </td>
-                <td className="py-2">{j.status}</td>
-                <td className="py-2">{j.start_date ?? "—"}</td>
-                <td className="py-2">{j.due_date ?? "—"}</td>
-                <td className="py-2">{j.completed_date ?? "—"}</td>
-                <td className="py-2">
-                  {j.last_issue_flagged_at ? "⚠" : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </main>
+    <>
+      <PageHeader
+        eyebrow="Admin · Jobs"
+        title="Job Oversight"
+        subtitle="All production jobs across suppliers — drill in to status, issues, and delivery."
+      />
+
+      <KpiGrid>
+        <KpiCard label="Total jobs" value={jobs.length} accent="cyan" />
+        <KpiCard label="In production" value={byStatus("in_production")} accent="amber" />
+        <KpiCard label="Inspection" value={byStatus("inspection")} accent="cyan" />
+        <KpiCard label="Complete" value={byStatus("complete")} accent="emerald" />
+      </KpiGrid>
+
+      <DataTable
+        columns={columns}
+        rows={jobs}
+        rowKey={(j) => j.id}
+        emptyTitle="No jobs yet"
+        emptyBody="Jobs are created when a supplier quote is accepted in the Quote Pipeline."
+      />
+    </>
   );
 }

@@ -2,6 +2,13 @@ import { redirect } from "next/navigation";
 import { AuthError, requireRole } from "@/lib/auth";
 import { getProfileForOrg } from "@/lib/supplier-profile/repository";
 import SupplierProfileForm from "./SupplierProfileForm";
+import { PageHeader } from "@/components/shell/PageHeader";
+import {
+  StatusBadge,
+  mapStatus,
+  supplierStatusMap,
+  Card,
+} from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -16,17 +23,22 @@ export default async function SupplierProfilePage() {
 
   const profile = await getProfileForOrg(user.organization_id);
   const canEdit = user.role === "supplier_admin";
+  const { label, tone } = mapStatus(
+    supplierStatusMap,
+    profile?.approval_status ?? "draft",
+  );
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="mb-2 text-2xl font-semibold">Supplier Profile</h1>
-      <p className="mb-6 text-sm text-gray-600">
-        Status:{" "}
-        <span className="font-mono">
-          {profile?.approval_status ?? "draft"}
-        </span>
-      </p>
-      <SupplierProfileForm initial={profile} canEdit={canEdit} />
-    </main>
+    <>
+      <PageHeader
+        eyebrow="Supplier · Qualification"
+        title="Company Profile"
+        subtitle="Maintain your organization's manufacturing capability, compliance evidence, and review metadata."
+        actions={<StatusBadge tone={tone}>{label}</StatusBadge>}
+      />
+      <Card>
+        <SupplierProfileForm initial={profile} canEdit={canEdit} />
+      </Card>
+    </>
   );
 }

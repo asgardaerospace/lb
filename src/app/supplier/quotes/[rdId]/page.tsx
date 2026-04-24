@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AuthError, requireRole } from "@/lib/auth";
 import { loadRequestForSupplier } from "@/lib/quotes/access";
@@ -6,6 +5,15 @@ import { getQuoteFor } from "@/lib/quotes/repository";
 import { listPartsForWorkPackage } from "@/lib/routing/repository";
 import { createServerSupabase } from "@/lib/supabase/server";
 import QuoteResponseForm from "./QuoteResponseForm";
+import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
+import {
+  Card,
+  DataTable,
+  StatusBadge,
+  WorkflowStepper,
+  type Column,
+} from "@/components/ui";
+import { formatDate } from "@/lib/ui/format";
 
 export const dynamic = "force-dynamic";
 
@@ -67,59 +75,94 @@ export default async function SupplierQuoteDetailPage({
 
   const canAct = user.role === "supplier_admin";
 
+  type Part = (typeof parts)[number];
+  const partCols: Column<Part>[] = [
+    {
+      key: "pn",
+      header: "Part #",
+      render: (p) => (
+        <span className="font-mono text-xs text-slate-200">{p.part_number}</span>
+      ),
+    },
+    {
+      key: "material",
+      header: "Material",
+      render: (p) => <span className="text-slate-400">{p.material ?? "—"}</span>,
+    },
+    {
+      key: "process",
+      header: "Process",
+      render: (p) => (
+        <span className="text-slate-400">{p.process_required ?? "—"}</span>
+      ),
+    },
+    {
+      key: "qty",
+      header: "Qty",
+      align: "right",
+      render: (p) => (
+        <span className="tabular-nums text-slate-300">{p.quantity ?? "—"}</span>
+      ),
+    },
+  ];
+
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <Link href="/supplier/quotes" className="text-sm text-gray-500 underline">
-        ← Quotes
-      </Link>
-      <h1 className="mt-2 text-2xl font-semibold">
-        {rfq?.rfq_title ?? "Quote request"}
-      </h1>
-      <p className="mb-6 text-sm text-gray-600">
-        Work package: {wp.package_name}
-        {wp.package_type ? ` · ${wp.package_type}` : ""}
-        {rfq ? ` · priority ${rfq.priority}` : ""}
-        {rfq?.required_delivery_date
-          ? ` · need-by ${rfq.required_delivery_date}`
-          : ""}
-      </p>
-      {wp.description ? (
-        <p className="mb-4 text-sm">{wp.description}</p>
-      ) : null}
-
-      <section className="mb-8">
-        <h2 className="mb-3 text-lg font-medium">Parts ({parts.length})</h2>
-        {parts.length === 0 ? (
-          <p className="text-sm text-gray-600">No parts attached.</p>
-        ) : (
-          <table className="w-full text-left text-sm">
-            <thead className="border-b">
-              <tr>
-                <th className="py-2">Part #</th>
-                <th className="py-2">Material</th>
-                <th className="py-2">Process</th>
-                <th className="py-2">Qty</th>
-              </tr>
-            </thead>
-            <tbody>
-              {parts.map((p) => (
-                <tr key={p.id} className="border-b">
-                  <td className="py-2 font-mono text-xs">{p.part_number}</td>
-                  <td className="py-2">{p.material ?? "—"}</td>
-                  <td className="py-2">{p.process_required ?? "—"}</td>
-                  <td className="py-2">{p.quantity ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <QuoteResponseForm
-        routingDecisionId={rd.id}
-        existing={existing}
-        canAct={canAct}
+    <>
+      <PageHeader
+        eyebrow={`Supplier · Quote${wp.package_name ? ` · ${wp.package_name}` : ""}`}
+        title={rfq?.rfq_title ?? "Quote request"}
+        subtitle={wp.description ?? undefined}
+        actions={
+          rfq ? (
+            <div className="flex gap-1.5">
+              <StatusBadge tone="info">{rfq.priority}</StatusBadge>
+              {rfq.required_delivery_date && (
+                <StatusBadge tone="neutral" dot={false}>
+                  Need-by {formatDate(rfq.required_delivery_date)}
+                </StatusBadge>
+              )}
+            </div>
+          ) : undefined
+        }
       />
-    </main>
+
+      <div className="mb-6">
+        <WorkflowStepper
+          steps={[
+            { key: "rfq", label: "RFQ" },
+            { key: "routing", label: "Routing" },
+            { key: "quote", label: "Quote" },
+            { key: "job", label: "Job" },
+          ]}
+          currentKey="quote"
+        />
+      </div>
+
+      <SectionHeader title={`Parts on this package (${parts.length})`} />
+      <div className="mb-5">
+        <DataTable
+          columns={partCols}
+          rows={parts}
+          rowKey={(p) => p.id}
+          emptyTitle="No parts attached"
+        />
+      </div>
+
+      <SectionHeader
+        title="Your quote response"
+        subtitle={
+          canAct
+            ? "Submit price, lead time, MOQ, and any notes."
+            : "Read-only — only Supplier Admin may submit or decline."
+        }
+      />
+      <Card>
+        <QuoteResponseForm
+          routingDecisionId={rd.id}
+          existing={existing}
+          canAct={canAct}
+        />
+      </Card>
+    </>
   );
 }

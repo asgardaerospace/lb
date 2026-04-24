@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AuthError, requireRole } from "@/lib/auth";
 import { loadRfqForOrg } from "@/lib/rfq/access";
@@ -7,6 +6,14 @@ import {
   listPartsForRfq,
 } from "@/lib/rfq/repository";
 import RfqEditor from "./RfqEditor";
+import { PageHeader } from "@/components/shell/PageHeader";
+import {
+  Card,
+  StatusBadge,
+  mapStatus,
+  rfqStatusMap,
+  WorkflowStepper,
+} from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -38,19 +45,45 @@ export default async function RfqPage({
     listPartsForRfq(id),
   ]);
 
+  const { label, tone } = mapStatus(rfqStatusMap, rfq.status);
+  const currentStep =
+    rfq.status === "draft"
+      ? "rfq"
+      : rfq.status === "submitted"
+        ? "routing"
+        : rfq.status === "routing_in_progress"
+          ? "routing"
+          : "quote";
+
   return (
-    <main className="mx-auto max-w-4xl p-8">
-      <Link
-        href={`/buyer/programs/${rfq.program_id}`}
-        className="text-sm text-gray-500 underline"
-      >
-        ← {program?.program_name ?? "Program"}
-      </Link>
-      <h1 className="mt-2 text-2xl font-semibold">{rfq.rfq_title}</h1>
-      <p className="mb-6 text-sm text-gray-600">
-        Status <span className="font-mono">{rfq.status}</span> · priority {rfq.priority}
-      </p>
-      <RfqEditor rfq={rfq} initialParts={parts} />
-    </main>
+    <>
+      <PageHeader
+        eyebrow={`Buyer · RFQ${program ? ` · ${program.program_name}` : ""}`}
+        title={rfq.rfq_title}
+        subtitle="Edit parts, attach drawings, and submit for routing."
+        actions={
+          <div className="flex gap-1.5">
+            <StatusBadge tone={tone}>{label}</StatusBadge>
+            <StatusBadge tone="info">{rfq.priority}</StatusBadge>
+          </div>
+        }
+      />
+
+      <div className="mb-6">
+        <WorkflowStepper
+          steps={[
+            { key: "rfq", label: "RFQ" },
+            { key: "routing", label: "Routing" },
+            { key: "quote", label: "Quote" },
+            { key: "job", label: "Job" },
+          ]}
+          currentKey={currentStep}
+        />
+      </div>
+
+      <Card>
+        <RfqEditor rfq={rfq} initialParts={parts} />
+      </Card>
+    </>
   );
 }

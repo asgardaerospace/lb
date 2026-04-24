@@ -1,8 +1,29 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #030712;
+  --foreground: #e5e7eb;
+
+  --surface-0: #030712;
+  --surface-1: #0b111f;
+  --surface-2: #111827;
+  --surface-3: #1f2937;
+
+  --border-subtle: #1e293b;
+  --border-default: #334155;
+
+  --text-primary: #e5e7eb;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --accent: #22d3ee;
+  --accent-dim: #0891b2;
+
+  --status-neutral: #64748b;
+  --status-info: #38bdf8;
+  --status-success: #34d399;
+  --status-warn: #fbbf24;
+  --status-danger: #f87171;
 }
 
 @theme inline {
@@ -12,15 +33,109 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+body {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+*::selection {
+  background: rgba(34, 211, 238, 0.35);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #1f2937;
+  border-radius: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Default dark-friendly form controls (low specificity via :where()). */
+:where(input[type="text"], input[type="number"], input[type="email"], input[type="password"], input[type="date"], input[type="search"], textarea, select) {
+  background-color: #0b111f;
+  color: var(--text-primary);
+  border-color: #1f2937;
+}
+
+:where(input[type="text"], input[type="number"], input[type="email"], input[type="password"], input[type="date"], input[type="search"], textarea, select):focus {
+  outline: none;
+  border-color: #0891b2;
+  box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.25);
+}
+
+:where(input::placeholder, textarea::placeholder) {
+  color: var(--text-muted);
+}
+
+:where(input[type="checkbox"]) {
+  accent-color: #22d3ee;
+}
+
+/* Legacy pages still ship `bg-black` / `text-white` buttons and `underline`
+   links. Soften them into the dark aesthetic without per-file edits. */
+:where(button.bg-black) {
+  background-color: #06b6d4 !important;
+  color: #02111a !important;
+}
+:where(button.bg-black):hover {
+  background-color: #22d3ee !important;
+}
+:where(a.underline) {
+  text-decoration-color: rgba(34, 211, 238, 0.5);
+  color: #67e8f9;
+}
+:where(.border-b) {
+  border-bottom-color: #1f2937;
+}
+:where(.border) {
+  border-color: #1f2937;
+}
+:where(.divide-y > :not([hidden]) ~ :not([hidden])) {
+  border-color: #1f2937;
+}
+:where(.text-gray-500, .text-gray-600, .text-gray-700) {
+  color: #94a3b8;
+}
+:where(.bg-gray-100) {
+  background-color: #0b111f;
+  color: var(--text-primary);
+}
+:where(.text-red-600) {
+  color: #fca5a5;
+}
+
+.hero-sheen {
+  background:
+    radial-gradient(
+      ellipse at 20% 0%,
+      rgba(34, 211, 238, 0.18),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse at 100% 100%,
+      rgba(59, 130, 246, 0.12),
+      transparent 50%
+    ),
+    linear-gradient(180deg, #0b111f 0%, #030712 100%);
 }

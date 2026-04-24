@@ -2,6 +2,17 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthError, requireAsgardAdmin } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/shell/PageHeader";
+import {
+  DataTable,
+  KpiCard,
+  KpiGrid,
+  StatusBadge,
+  mapStatus,
+  rfqStatusMap,
+  type Column,
+} from "@/components/ui";
+import { formatDate, formatDateTime, relativeDaysFrom } from "@/lib/ui/format";
 
 export const dynamic = "force-dynamic";
 
@@ -33,46 +44,119 @@ export default async function RoutingQueuePage() {
 
   const rows = (data ?? []) as QueueRow[];
 
+  const submittedCount = rows.filter((r) => r.status === "submitted").length;
+  const routingCount = rows.filter((r) => r.status === "routing_in_progress").length;
+
+  const priorityTone = (p: string) => {
+    if (p === "urgent") return "danger";
+    if (p === "high") return "warn";
+    if (p === "low") return "neutral";
+    return "info";
+  };
+
+  const columns: Column<QueueRow>[] = [
+    {
+      key: "title",
+      header: "RFQ",
+      render: (r) => (
+        <Link
+          href={`/admin/routing/rfqs/${r.id}`}
+          className="font-medium text-slate-100 transition hover:text-cyan-300"
+        >
+          {r.rfq_title}
+        </Link>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => {
+        const { label, tone } = mapStatus(rfqStatusMap, r.status);
+        return <StatusBadge tone={tone}>{label}</StatusBadge>;
+      },
+    },
+    {
+      key: "priority",
+      header: "Priority",
+      render: (r) => (
+        <StatusBadge tone={priorityTone(r.priority)}>{r.priority}</StatusBadge>
+      ),
+    },
+    {
+      key: "need_by",
+      header: "Need-by",
+      render: (r) => (
+        <span className="text-slate-400">{formatDate(r.required_delivery_date)}</span>
+      ),
+    },
+    {
+      key: "submitted",
+      header: "Submitted",
+      render: (r) => (
+        <span className="text-slate-500">{formatDateTime(r.submitted_at)}</span>
+      ),
+    },
+    {
+      key: "days",
+      header: "Days waiting",
+      align: "right",
+      render: (r) => {
+        const d = relativeDaysFrom(r.submitted_at);
+        return (
+          <span className="tabular-nums text-slate-400">
+            {d === null ? "—" : d}
+          </span>
+        );
+      },
+    },
+  ];
+
   return (
-    <main className="mx-auto max-w-5xl p-8">
-      <h1 className="mb-6 text-2xl font-semibold">Routing Queue</h1>
-      {rows.length === 0 ? (
-        <p className="text-sm text-gray-600">No RFQs awaiting routing.</p>
-      ) : (
-        <table className="w-full text-left text-sm">
-          <thead className="border-b">
-            <tr>
-              <th className="py-2">Title</th>
-              <th className="py-2">Status</th>
-              <th className="py-2">Priority</th>
-              <th className="py-2">Need-by</th>
-              <th className="py-2">Submitted</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-b">
-                <td className="py-2">
-                  <Link
-                    href={`/admin/routing/rfqs/${r.id}`}
-                    className="underline"
-                  >
-                    {r.rfq_title}
-                  </Link>
-                </td>
-                <td className="py-2">{r.status}</td>
-                <td className="py-2">{r.priority}</td>
-                <td className="py-2">{r.required_delivery_date ?? "—"}</td>
-                <td className="py-2">
-                  {r.submitted_at
-                    ? new Date(r.submitted_at).toLocaleString()
-                    : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </main>
+    <>
+      <PageHeader
+        eyebrow="Admin · Routing"
+        title="Routing Queue"
+        subtitle="RFQs ready for supplier matching — review, create work packages, and trigger the quote process."
+      />
+
+      <KpiGrid>
+        <KpiCard
+          label="Submitted"
+          value={submittedCount}
+          sublabel="Awaiting triage"
+          accent="amber"
+        />
+        <KpiCard
+          label="Routing in Progress"
+          value={routingCount}
+          sublabel="Work packages open"
+          accent="cyan"
+        />
+        <KpiCard
+          label="Total in Queue"
+          value={rows.length}
+          sublabel="All non-closed RFQs"
+          accent="emerald"
+        />
+        <KpiCard
+          label="Oldest (days)"
+          value={
+            rows
+              .map((r) => relativeDaysFrom(r.submitted_at) ?? 0)
+              .reduce((a, b) => Math.max(a, b), 0) || 0
+          }
+          sublabel="Longest wait"
+          accent="rose"
+        />
+      </KpiGrid>
+
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(r) => r.id}
+        emptyTitle="No RFQs awaiting routing"
+        emptyBody="New buyer submissions will appear here. Open the RFQ inbox to see closed items."
+      />
+    </>
   );
 }

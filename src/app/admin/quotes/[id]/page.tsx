@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AuthError, requireAsgardAdmin } from "@/lib/auth";
 import { getQuoteById } from "@/lib/quotes/repository";
@@ -8,6 +7,16 @@ import {
 } from "@/lib/routing/repository";
 import { createServerSupabase } from "@/lib/supabase/server";
 import QuoteReviewActions from "./QuoteReviewActions";
+import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
+import {
+  Card,
+  DataTable,
+  StatusBadge,
+  mapStatus,
+  quoteStatusMap,
+  type Column,
+} from "@/components/ui";
+import { formatCurrency, formatDateTime } from "@/lib/ui/format";
 
 export const dynamic = "force-dynamic";
 
@@ -36,78 +45,123 @@ export default async function AdminQuoteDetailPage({
       .select("id, name")
       .eq("id", quote.supplier_organization_id)
       .maybeSingle()
-      .then(
-        (r) => r.data as { id: string; name: string } | null,
-      ),
+      .then((r) => r.data as { id: string; name: string } | null),
   ]);
 
+  const { label, tone } = mapStatus(quoteStatusMap, quote.status);
+
+  type Part = (typeof parts)[number];
+  const partColumns: Column<Part>[] = [
+    {
+      key: "pn",
+      header: "Part #",
+      render: (p) => (
+        <span className="font-mono text-xs text-slate-200">{p.part_number}</span>
+      ),
+    },
+    {
+      key: "material",
+      header: "Material",
+      render: (p) => <span className="text-slate-400">{p.material ?? "—"}</span>,
+    },
+    {
+      key: "process",
+      header: "Process",
+      render: (p) => (
+        <span className="text-slate-400">{p.process_required ?? "—"}</span>
+      ),
+    },
+    {
+      key: "qty",
+      header: "Qty",
+      align: "right",
+      render: (p) => (
+        <span className="tabular-nums text-slate-300">{p.quantity ?? "—"}</span>
+      ),
+    },
+  ];
+
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <Link href="/admin/quotes" className="text-sm text-gray-500 underline">
-        ← Quotes
-      </Link>
-      <h1 className="mt-2 text-2xl font-semibold">
-        Quote from {orgRow?.name ?? "(unknown)"}
-      </h1>
-      <p className="mb-6 text-sm text-gray-600">
-        Status <span className="font-mono">{quote.status}</span>
-        {wp ? ` · work package ${wp.package_name}` : ""}
-      </p>
+    <>
+      <PageHeader
+        eyebrow="Admin · Quote Review"
+        title={`Quote from ${orgRow?.name ?? "(unknown supplier)"}`}
+        subtitle={wp ? `Work package · ${wp.package_name}` : undefined}
+        actions={<StatusBadge tone={tone}>{label}</StatusBadge>}
+      />
 
-      <section className="mb-6 rounded border p-4 text-sm">
-        <dl className="grid grid-cols-2 gap-2">
-          <dt className="text-gray-500">Price</dt>
-          <dd>{quote.quoted_price ?? "—"}</dd>
-          <dt className="text-gray-500">Lead time (days)</dt>
-          <dd>{quote.lead_time_days ?? "—"}</dd>
-          <dt className="text-gray-500">Min order qty</dt>
-          <dd>{quote.minimum_order_quantity ?? "—"}</dd>
-          <dt className="text-gray-500">Submitted</dt>
-          <dd>
-            {quote.submitted_at
-              ? new Date(quote.submitted_at).toLocaleString()
-              : "—"}
-          </dd>
-          <dt className="text-gray-500">Notes</dt>
-          <dd>{quote.quote_notes ?? "—"}</dd>
-          {quote.review_notes ? (
-            <>
-              <dt className="text-gray-500">Review notes</dt>
-              <dd>{quote.review_notes}</dd>
-            </>
-          ) : null}
-        </dl>
-      </section>
+      <div className="mb-5 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Price
+          </div>
+          <div className="mt-1 text-lg font-semibold tabular-nums text-slate-100">
+            {formatCurrency(quote.quoted_price)}
+          </div>
+        </Card>
+        <Card>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Lead time
+          </div>
+          <div className="mt-1 text-lg font-semibold tabular-nums text-slate-100">
+            {quote.lead_time_days ?? "—"}
+            {quote.lead_time_days != null && (
+              <span className="ml-1 text-xs text-slate-500">days</span>
+            )}
+          </div>
+        </Card>
+        <Card>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Min order qty
+          </div>
+          <div className="mt-1 text-lg font-semibold tabular-nums text-slate-100">
+            {quote.minimum_order_quantity ?? "—"}
+          </div>
+        </Card>
+        <Card>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Submitted
+          </div>
+          <div className="mt-1 text-sm text-slate-200">
+            {formatDateTime(quote.submitted_at)}
+          </div>
+        </Card>
+      </div>
 
-      <section className="mb-6">
-        <h2 className="mb-3 text-lg font-medium">Parts ({parts.length})</h2>
-        {parts.length === 0 ? (
-          <p className="text-sm text-gray-600">No parts.</p>
-        ) : (
-          <table className="w-full text-left text-sm">
-            <thead className="border-b">
-              <tr>
-                <th className="py-2">Part #</th>
-                <th className="py-2">Material</th>
-                <th className="py-2">Process</th>
-                <th className="py-2">Qty</th>
-              </tr>
-            </thead>
-            <tbody>
-              {parts.map((p) => (
-                <tr key={p.id} className="border-b">
-                  <td className="py-2 font-mono text-xs">{p.part_number}</td>
-                  <td className="py-2">{p.material ?? "—"}</td>
-                  <td className="py-2">{p.process_required ?? "—"}</td>
-                  <td className="py-2">{p.quantity ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+      {(quote.quote_notes || quote.review_notes) && (
+        <div className="mb-5 grid gap-3 md:grid-cols-2">
+          {quote.quote_notes && (
+            <Card>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                Supplier notes
+              </div>
+              <p className="mt-1 text-sm text-slate-300">{quote.quote_notes}</p>
+            </Card>
+          )}
+          {quote.review_notes && (
+            <Card>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                Review notes
+              </div>
+              <p className="mt-1 text-sm text-slate-300">{quote.review_notes}</p>
+            </Card>
+          )}
+        </div>
+      )}
 
-      <QuoteReviewActions quoteId={quote.id} status={quote.status} />
-    </main>
+      <SectionHeader title={`Parts on this package (${parts.length})`} />
+      <div className="mb-5">
+        <DataTable
+          columns={partColumns}
+          rows={parts}
+          rowKey={(p) => p.id}
+          emptyTitle="No parts attached"
+        />
+      </div>
+
+      <Card>
+        <QuoteReviewActions quoteId={quote.id} status={quote.status} />
+      </Card>
+    </>
   );
 }
