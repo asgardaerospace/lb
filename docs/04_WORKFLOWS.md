@@ -431,13 +431,83 @@ Maintain execution continuity.
 # 12. State Transitions
 
 ## RFQ
-draft → submitted → routing → quoted → awarded → closed  
+
+Implemented slice (tasks 02 + 03):
+
+```text
+draft ──► submitted ──► routing_in_progress ──► quotes_requested
+```
+
+Transitions driven by:
+
+- `draft → submitted`                     — buyer submits RFQ (task 02)
+- `submitted → routing_in_progress`       — admin creates first work package (task 03)
+- `routing_in_progress → quotes_requested` — admin requests first quote (task 03)
+
+`awarded` and `closed` states from the original roadmap are **not yet
+implemented**. Today the RFQ stays in `quotes_requested` after a job is
+created. Closing the loop (quote-accept → `awarded`; final job complete →
+`closed`) is deferred to a later task.
 
 ## Part
-draft → routed → in_production → complete  
+
+Part-level lifecycle (`draft → routed → in_production → complete`) is **not
+implemented**. Parts are plain rows on an RFQ; movement through the system
+is tracked at the work-package and job level. A later task should either
+add a `status` column to `parts` or remove this chain from the doc.
+
+## Work Package
+
+```text
+open ──► routed
+```
+
+`open` on creation; `routed` is reserved for the future "all candidate
+decisions resolved" transition. Not actively toggled in task 03.
+
+## Routing Decision
+
+```text
+pending ──► quote_requested
+```
+
+`pending` on creation (task 03). Admin moves to `quote_requested` when
+issuing the quote request to the supplier. No further states yet;
+award/decline handling lives on the adjacent `quotes` row today.
+
+## Quote
+
+```text
+draft ──► submitted ──► under_review ──► accepted
+                    │                │
+                    │                └──► rejected      (admin terminal)
+                    │
+                    └──► declined                       (supplier terminal)
+```
+
+Allowed transitions (enforced server-side by task 04):
+
+- `draft → submitted`                    (supplier submits)
+- `draft → declined`                     (supplier declines)
+- `submitted → under_review`             (admin triage; currently not exposed in UI)
+- `submitted → accepted | rejected`      (admin decision)
+- `under_review → accepted | rejected`   (admin decision)
+
+`accepted` atomically creates a matching `jobs` row with status `awarded`.
+`accepted`, `rejected`, and `declined` are terminal.
 
 ## Job
-awarded → scheduled → in_production → inspection → complete  
+
+Implemented chain (task 04 + task 05):
+
+```text
+awarded ──► scheduled ──► in_production ──► inspection ──► shipped ──► complete
+```
+
+Supplier transitions are forward-only; admin override (task 05) may move a
+job to any state, logged as `job.status_overridden`. `start_date` is
+stamped on entry to `in_production`; `completed_date` is stamped on entry
+to `complete`.
 
 ## Supplier Profile
 

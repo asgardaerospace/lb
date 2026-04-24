@@ -281,12 +281,204 @@ shape and metadata as approve. After this, the supplier may edit and resubmit.
 
 ---
 
-# 5. Conventions
+# 5. Buyer RFQ Intake Endpoints
+
+Implemented by task 02. All routes enforce `buyer_organization_id =
+session.organization_id` in the handler and via RLS.
+
+## GET `/api/buyer/programs`
+List the caller's org's programs. Auth: `buyer_admin`, `buyer_user`.
+Response: `{ "programs": Program[] }`.
+
+## POST `/api/buyer/programs`
+Create a program. Auth: `buyer_admin`, `buyer_user`. Body:
+`{ program_name, program_type?, description?, compliance_level?,
+itar_controlled?, cui_controlled? }`.
+Audit: `program.created`.
+Response: `{ "program": Program }`, status 201.
+
+## GET `/api/buyer/programs/[id]`
+Single program plus its RFQs. Returns 403 if cross-org.
+
+## POST `/api/buyer/programs/[id]/rfqs`
+Create an RFQ under a program. Body: `{ rfq_title, description?, quantity?,
+required_delivery_date?, priority? }`.
+Audit: `rfq.created`. Response: `{ "rfq": Rfq }`, status 201.
+
+## GET `/api/buyer/rfqs`
+List the caller's org's RFQs across all their programs.
+
+## GET `/api/buyer/rfqs/[id]`
+Single RFQ plus its parts.
+
+## PUT `/api/buyer/rfqs/[id]`
+Update an RFQ. Only while status is `draft`. Body: any subset of creation
+fields.
+
+## POST `/api/buyer/rfqs/[id]/parts`
+Add a part to a draft RFQ. Body: `{ part_number, part_name?, revision?,
+material?, process_required?, quantity?, tolerance_notes?,
+finish_requirements?, inspection_requirements? }`.
+Response: `{ "part": Part }`, status 201.
+
+## DELETE `/api/buyer/rfqs/[id]/parts/[partId]`
+Remove a part from a draft RFQ.
+
+## POST `/api/buyer/rfqs/[id]/submit`
+Transitions `draft → submitted`. Requires at least one part.
+Audit: `rfq.submitted`.
+
+## GET `/api/admin/rfqs` (task 02)
+Admin list of RFQs filtered by status (defaults `submitted`).
+
+## GET `/api/admin/rfqs/[id]` (task 02)
+Admin single-RFQ view including parts.
+
+---
+
+# 6. Admin Routing Console Endpoints
+
+Implemented by task 03. All routes require `asgard_admin`.
+
+## GET `/api/admin/routing/queue`
+RFQs in `submitted` or `routing_in_progress`, ordered by submission time.
+
+## POST `/api/admin/rfqs/[id]/work-packages`
+Create a work package under an RFQ. On first package, transitions the
+parent RFQ `submitted → routing_in_progress`. Body:
+`{ package_name, package_type?, description? }`.
+Audit: `work_package.created` (metadata includes
+`rfq_status_after: routing_in_progress`).
+
+## GET `/api/admin/work-packages/[id]`
+Returns `{ work_package, parts, routing_decisions }`.
+
+## POST `/api/admin/work-packages/[id]/parts`
+Attach a part to a work package. Body: `{ part_id }`. Enforces that the
+part belongs to the same RFQ as the work package.
+
+## DELETE `/api/admin/work-packages/[id]/parts/[partId]`
+Detach a part from a work package.
+
+## GET `/api/admin/work-packages/[id]/candidates`
+Lists approved supplier profiles as routing candidates.
+
+## POST `/api/admin/work-packages/[id]/routing-decisions`
+Record a routing decision. Body: `{ supplier_organization_id,
+capability_fit_score?, capacity_fit_score?, compliance_fit_score?,
+schedule_fit_score?, routing_rationale? }`. All scores 0–100. Verifies the
+supplier has an approved profile.
+Audit: `routing_decision.created`.
+
+## POST `/api/admin/routing-decisions/[id]/request-quote`
+Transitions `pending → quote_requested`, stamps `quote_requested_at`. On
+first request within an RFQ, transitions RFQ
+`routing_in_progress → quotes_requested`.
+Audit: `routing_decision.quote_requested`.
+
+## GET `/api/supplier/quote-requests`
+Supplier inbox — routing decisions assigned to the caller with status
+`quote_requested`. Response is projected to exclude rationale and any
+competitor data. Auth: `supplier_admin`, `supplier_user`.
+
+---
+
+# 7. Supplier Quote Workflow Endpoints
+
+Implemented by task 04. Supplier routes resolve
+`supplier_organization_id` from the session; admin routes require
+`asgard_admin`.
+
+## GET `/api/supplier/quotes`
+Unified inbox: open quote requests plus any quote rows already submitted
+or declined by the caller.
+
+## GET `/api/supplier/quote-requests/[rdId]/quote`
+Returns the caller's existing quote for this routing decision (or `null`).
+
+## POST `/api/supplier/quote-requests/[rdId]/submit-quote`
+Creates a quote in `submitted` status. Body: `{ quoted_price?,
+lead_time_days?, minimum_order_quantity?, quote_notes? }`.
+`quoted_price` accepts number or string decimal (max 2 dp).
+Audit: `quote.submitted`.
+
+## POST `/api/supplier/quote-requests/[rdId]/decline`
+Creates a quote in `declined` status. Body: `{ quote_notes? }`.
+Audit: `quote.declined`.
+
+## GET `/api/admin/quotes`
+List quotes filtered by status (default `submitted,under_review`).
+
+## GET `/api/admin/quotes/[id]`
+Admin single-quote view with work package, parts, and supplier org.
+
+## POST `/api/admin/quotes/[id]/accept`
+`submitted | under_review → accepted`. Atomically inserts a
+`jobs` row with `status = awarded` and inherits the RFQ's
+`required_delivery_date` as `due_date`. Body: `{ review_notes? }`.
+Audit: `quote.accepted` **and** `job.created`.
+Response: `{ quote, job }`.
+
+## POST `/api/admin/quotes/[id]/reject`
+`submitted | under_review → rejected`. Body: `{ review_notes? }`.
+Audit: `quote.rejected`.
+
+---
+
+# 8. Job Execution Tracking Endpoints
+
+Implemented by task 05.
+
+## GET `/api/supplier/jobs`
+List jobs assigned to the caller's supplier org.
+
+## GET `/api/supplier/jobs/[id]`
+Single job, own-org only (404 on cross-org).
+
+## POST `/api/supplier/jobs/[id]/status`
+Forward-only supplier transition:
+`awarded → scheduled → in_production → inspection → shipped → complete`.
+Body: `{ status, note? }`. Side effects: stamps `start_date` on first entry
+into `in_production`; stamps `completed_date` on entry to `complete`.
+Audit: `job.status_updated`.
+
+## POST `/api/supplier/jobs/[id]/flag-issue`
+Writes `last_issue_note` and `last_issue_flagged_at`. Body: `{ note }`
+(required).
+Audit: `job.issue_flagged`.
+
+## GET `/api/admin/jobs`
+All jobs.
+
+## GET `/api/admin/jobs/[id]`
+Admin single-job view.
+
+## POST `/api/admin/jobs/[id]/status`
+Admin override — any-to-any transition permitted, logged distinctly from
+supplier updates. Body: `{ status, note? }`.
+Audit: `job.status_overridden`.
+
+## POST `/api/admin/jobs/[id]/flag-issue`
+Admin risk flag. Same shape and audit action (`job.issue_flagged`) as the
+supplier endpoint.
+
+## GET `/api/buyer/jobs`
+Jobs tied to the caller's programs (join: jobs → work_packages → rfqs →
+programs where `buyer_organization_id = session.organization_id`).
+Read-only.
+
+---
+
+# 9. Conventions
 
 - Request and response bodies are JSON with `content-type: application/json`.
 - All error responses use the shape `{ "error": "message" }`.
-- Dates are ISO 8601 strings in UTC.
+- Dates are ISO 8601 strings in UTC; date-only fields use `YYYY-MM-DD`.
 - `organization_id` is never accepted in a request body. It is resolved from
   the authenticated session and applied server-side.
 - `role` checks happen in the API handler before any data access. RLS policies
   on the database enforce the same rules as defense-in-depth.
+- Every state-changing endpoint writes exactly one audit log row per primary
+  state change. The `accept` endpoint is the one exception — it writes both
+  `quote.accepted` and `job.created` because accepting a quote atomically
+  creates a job.
