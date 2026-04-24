@@ -10,14 +10,21 @@ export type AuditAction =
   | "rfq.submitted"
   | "work_package.created"
   | "routing_decision.created"
-  | "routing_decision.quote_requested";
+  | "routing_decision.quote_requested"
+  | "quote.submitted"
+  | "quote.declined"
+  | "quote.accepted"
+  | "quote.rejected"
+  | "job.created";
 
 export type AuditEntityType =
   | "supplier_profile"
   | "program"
   | "rfq"
   | "work_package"
-  | "routing_decision";
+  | "routing_decision"
+  | "quote"
+  | "job";
 
 export interface AuditEvent {
   action: AuditAction;
