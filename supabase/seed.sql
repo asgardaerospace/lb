@@ -13,7 +13,7 @@
 --
 -- The SQL targets the Supabase auth schema as of the Supabase CLI 1.200+.
 -- If the schema has drifted, use the Admin API alternative documented in
--- SETUP.md §5.
+-- /docs/08_SUPABASE_SETUP.md §6.
 --
 -- ---------------------------------------------------------------------------
 -- Fixed UUIDs so the script is idempotent and deterministic.
