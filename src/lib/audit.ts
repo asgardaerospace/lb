@@ -15,7 +15,10 @@ export type AuditAction =
   | "quote.declined"
   | "quote.accepted"
   | "quote.rejected"
-  | "job.created";
+  | "job.created"
+  | "job.status_updated"
+  | "job.status_overridden"
+  | "job.issue_flagged";
 
 export type AuditEntityType =
   | "supplier_profile"
