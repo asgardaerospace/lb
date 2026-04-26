@@ -127,6 +127,13 @@ const SCREENS: Record<Exclude<Role, "all">, Screen[]> = {
   ],
   buyer: [
     {
+      title: "Customer Onboarding",
+      href: "/onboarding",
+      description:
+        "9-step intake — company, programs, mfg, compliance, posture, supply chain, data, first-use, review.",
+      status: "preview",
+    },
+    {
       title: "Mission Control",
       href: "/buyer/dashboard",
       description: "Programs active, RFQs submitted, in-routing, in production.",
@@ -261,6 +268,12 @@ const WALKTHROUGHS: Walkthrough[] = [
 ];
 
 const SCENARIOS: Scenario[] = [
+  {
+    title: "New customer onboarding intake",
+    body: "Multi-step configuration wizard — operational vocabulary, derived workspace tier, supplier filter rules.",
+    role: "buyer",
+    href: "/onboarding",
+  },
   {
     title: "Buyer with programs in flight",
     body: "Mission control with KPIs, recent RFQs, and any production tracking.",
