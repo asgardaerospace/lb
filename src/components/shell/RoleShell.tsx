@@ -2,6 +2,7 @@ import { AppShell } from "./AppShell";
 import { adminNav, buyerNav, supplierNav } from "./nav-config";
 import { getOptionalUser, type SessionUser } from "@/lib/auth";
 import { PreviewModeBanner } from "./PreviewModeBanner";
+import { NotificationsBell } from "./NotificationsBell";
 
 type ShellRole = "admin" | "supplier" | "buyer";
 
@@ -39,6 +40,7 @@ export async function RoleShell({
       roleLabel={roleLabelFor(role, user)}
       userLabel={user ? user.email.split("@")[0] : "Preview"}
       userEmail={user?.email ?? "preview@launchbelt.local"}
+      topbarRight={user ? <NotificationsBell /> : null}
     >
       {user ? null : <PreviewModeBanner />}
       {children}

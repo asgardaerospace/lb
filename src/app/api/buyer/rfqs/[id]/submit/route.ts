@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
 import { errorResponse } from "@/lib/api";
 import { logAuditEvent } from "@/lib/audit";
+import { notifyRfqSubmitted } from "@/lib/notifications/dispatch";
 import {
   listPartsForRfq,
   setRfqStatus,
@@ -48,6 +49,12 @@ export async function POST(
         part_count: parts.length,
         previous_status: rfq.status,
       },
+    });
+
+    await notifyRfqSubmitted({
+      rfqId: updated.id,
+      rfqTitle: updated.rfq_title,
+      buyerOrgId: user.organization_id,
     });
 
     return NextResponse.json({ rfq: updated });

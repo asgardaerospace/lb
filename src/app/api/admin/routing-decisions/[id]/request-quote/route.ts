@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAsgardAdmin } from "@/lib/auth";
 import { errorResponse } from "@/lib/api";
 import { logAuditEvent } from "@/lib/audit";
+import { notifyQuoteRequested } from "@/lib/notifications/dispatch";
+import { getRfqById } from "@/lib/rfq/repository";
 import {
   getRoutingDecisionById,
   getWorkPackageById,
@@ -52,6 +54,14 @@ export async function POST(
         work_package_id: updated.work_package_id,
         supplier_organization_id: updated.supplier_organization_id,
       },
+    });
+
+    const rfq = wp ? await getRfqById(wp.rfq_id) : null;
+    await notifyQuoteRequested({
+      routingDecisionId: updated.id,
+      workPackageId: updated.work_package_id,
+      supplierOrgId: updated.supplier_organization_id,
+      rfqTitle: rfq?.rfq_title ?? null,
     });
 
     return NextResponse.json({ routing_decision: updated });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAsgardAdmin } from "@/lib/auth";
 import { errorResponse } from "@/lib/api";
 import { logAuditEvent } from "@/lib/audit";
+import { notifyQuoteAccepted } from "@/lib/notifications/dispatch";
 import {
   getQuoteById,
   insertJob,
@@ -37,16 +38,19 @@ export async function POST(
     // Look up rfq.required_delivery_date so the job can inherit a due date.
     const wp = await getWorkPackageById(quote.work_package_id);
     let due_date: string | null = null;
+    let rfqTitle: string | null = null;
     if (wp) {
       const supabase = await createServerSupabase();
       const { data: rfq } = await supabase
         .from("rfqs")
-        .select("required_delivery_date")
+        .select("required_delivery_date, rfq_title")
         .eq("id", wp.rfq_id)
         .maybeSingle();
-      due_date =
-        (rfq as { required_delivery_date: string | null } | null)
-          ?.required_delivery_date ?? null;
+      const row = rfq as
+        | { required_delivery_date: string | null; rfq_title: string | null }
+        | null;
+      due_date = row?.required_delivery_date ?? null;
+      rfqTitle = row?.rfq_title ?? null;
     }
 
     const updated = await setQuoteStatus(id, "accepted", {
@@ -90,6 +94,13 @@ export async function POST(
         supplier_organization_id: job.supplier_organization_id,
         due_date: job.due_date,
       },
+    });
+
+    await notifyQuoteAccepted({
+      quoteId: updated.id,
+      supplierOrgId: updated.supplier_organization_id,
+      workPackageId: updated.work_package_id,
+      rfqTitle,
     });
 
     return NextResponse.json({ quote: updated, job });
