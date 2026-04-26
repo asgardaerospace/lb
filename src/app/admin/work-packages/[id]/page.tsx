@@ -3,10 +3,10 @@ import { getOptionalUser } from "@/lib/auth";
 import { listPartsForRfq } from "@/lib/rfq/repository";
 import {
   getWorkPackageById,
-  listCandidateSuppliers,
   listPartsForWorkPackage,
   listRoutingDecisionsForWorkPackage,
 } from "@/lib/routing/repository";
+import { rankCandidatesForWorkPackage } from "@/lib/routing/rank";
 import WorkPackageDetail from "./WorkPackageDetail";
 import { PageHeader } from "@/components/shell/PageHeader";
 import {
@@ -60,10 +60,10 @@ export default async function WorkPackagePage({
   }
   if (!wp) notFound();
 
-  const [attachedParts, rfqParts, candidates, decisions] = await Promise.all([
+  const [attachedParts, rfqParts, rankedCandidates, decisions] = await Promise.all([
     listPartsForWorkPackage(id),
     listPartsForRfq(wp.rfq_id),
-    listCandidateSuppliers(),
+    rankCandidatesForWorkPackage(id),
     listRoutingDecisionsForWorkPackage(id),
   ]);
 
@@ -76,6 +76,7 @@ export default async function WorkPackagePage({
         eyebrow="Admin · Work Package"
         title={wp.package_name}
         subtitle={wp.package_type ?? undefined}
+        back={{ href: `/admin/routing/rfqs/${wp.rfq_id}`, label: "Back to RFQ" }}
         actions={
           <StatusBadge tone={wp.status === "routed" ? "success" : "info"}>
             {wp.status}
@@ -100,7 +101,7 @@ export default async function WorkPackagePage({
           workPackageId={wp.id}
           attachedParts={attachedParts}
           unattachedParts={unattachedParts}
-          candidates={candidates}
+          rankedCandidates={rankedCandidates}
           initialDecisions={decisions}
         />
       </Card>

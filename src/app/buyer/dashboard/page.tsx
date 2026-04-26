@@ -5,6 +5,7 @@ import {
   listRfqsForOrg,
 } from "@/lib/rfq/repository";
 import { listJobsForBuyer } from "@/lib/jobs/repository";
+import { loadBuyerKpis } from "@/lib/kpis";
 import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
 import {
   Card,
@@ -99,18 +100,21 @@ export default async function BuyerDashboardPage() {
   let programs: Program[] = [];
   let rfqs: Rfq[] = [];
   let jobs: Awaited<ReturnType<typeof listJobsForBuyer>> = [];
+  let kpis: Awaited<ReturnType<typeof loadBuyerKpis>> = null;
   let liveLoadFailed = false;
 
   if (isBuyer && user) {
     try {
-      const [p, r, j] = await Promise.all([
+      const [p, r, j, k] = await Promise.all([
         listProgramsForOrg(user.organization_id),
         listRfqsForOrg(user.organization_id),
         listJobsForBuyer(user.organization_id),
+        loadBuyerKpis(user.organization_id),
       ]);
       programs = p as Program[];
       rfqs = r as Rfq[];
       jobs = j;
+      kpis = k;
     } catch {
       liveLoadFailed = true;
     }
@@ -124,9 +128,9 @@ export default async function BuyerDashboardPage() {
     ? (PREVIEW_BUYER_RFQS as unknown as Rfq[])
     : rfqs;
 
-  const inProduction = jobs.filter((j) => j.status === "in_production").length;
-  const pendingQuotes = displayRfqs.filter((r) =>
-    ["submitted", "routing_in_progress", "quotes_requested"].includes(r.status),
+  const previewRfqsInRouting = (PREVIEW_BUYER_RFQS as unknown as Rfq[]).filter(
+    (r) =>
+      r.status === "routing_in_progress" || r.status === "quotes_requested",
   ).length;
 
   return (
@@ -156,22 +160,42 @@ export default async function BuyerDashboardPage() {
 
       <KpiGrid>
         <KpiCard
-          label="Active Programs"
-          value={displayPrograms.length}
+          label="Programs Active"
+          value={
+            previewMode
+              ? displayPrograms.length
+              : (kpis?.programsActive ?? displayPrograms.length)
+          }
+          sublabel={
+            previewMode
+              ? "Preview"
+              : `${kpis?.programsTotal ?? displayPrograms.length} total`
+          }
           accent="cyan"
         />
-        <KpiCard label="Total RFQs" value={displayRfqs.length} accent="emerald" />
         <KpiCard
-          label="Pending Quotes"
-          value={pendingQuotes}
+          label="RFQs Submitted"
+          value={
+            previewMode
+              ? displayRfqs.filter((r) => r.status !== "draft").length
+              : (kpis?.rfqsSubmitted ?? 0)
+          }
+          sublabel={`${previewMode ? displayRfqs.length : (kpis?.rfqsTotal ?? 0)} on file`}
+          accent="emerald"
+        />
+        <KpiCard
+          label="In Routing"
+          value={previewMode ? previewRfqsInRouting : (kpis?.rfqsInRouting ?? 0)}
           sublabel="Awaiting supplier response"
           accent="amber"
         />
         <KpiCard
-          label="In Production"
-          value={previewMode ? 2 : inProduction}
+          label="Jobs in Production"
+          value={previewMode ? 2 : (kpis?.jobsInProduction ?? 0)}
           sublabel={
-            previewMode ? "Preview · 7 jobs" : `${jobs.length} total jobs`
+            previewMode
+              ? "Preview · 7 jobs"
+              : `${kpis?.jobsComplete ?? 0} complete · ${kpis?.jobsTotal ?? jobs.length} total`
           }
           accent="cyan"
         />

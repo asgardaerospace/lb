@@ -3,6 +3,7 @@ import { getOptionalUser } from "@/lib/auth";
 import { listQuoteRequestsForSupplier } from "@/lib/routing/repository";
 import { listSupplierInbox } from "@/lib/quotes/repository";
 import { listJobsForSupplier } from "@/lib/jobs/repository";
+import { loadSupplierKpis } from "@/lib/kpis";
 import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
 import {
   KpiCard,
@@ -32,14 +33,16 @@ export default async function SupplierDashboardPage() {
   let requests: Awaited<ReturnType<typeof listQuoteRequestsForSupplier>> = [];
   let inbox: Awaited<ReturnType<typeof listSupplierInbox>> = [];
   let jobs: Awaited<ReturnType<typeof listJobsForSupplier>> = [];
+  let kpis: Awaited<ReturnType<typeof loadSupplierKpis>> = null;
   let liveLoadFailed = false;
 
   if (isSupplier && user) {
     try {
-      [requests, inbox, jobs] = await Promise.all([
+      [requests, inbox, jobs, kpis] = await Promise.all([
         listQuoteRequestsForSupplier(user.organization_id),
         listSupplierInbox(user.organization_id),
         listJobsForSupplier(user.organization_id),
+        loadSupplierKpis(user.organization_id),
       ]);
     } catch {
       liveLoadFailed = true;
@@ -57,8 +60,6 @@ export default async function SupplierDashboardPage() {
   const pendingQuotes = inbox.filter(
     (e) => !e.existing_quote || e.existing_quote.status === "draft",
   ).length;
-  const inProduction = jobs.filter((j) => j.status === "in_production").length;
-  const complete = jobs.filter((j) => j.status === "complete").length;
 
   return (
     <>
@@ -84,28 +85,32 @@ export default async function SupplierDashboardPage() {
 
       <KpiGrid>
         <KpiCard
-          label="Parts Assigned"
-          value={requests.reduce((acc, r) => acc + r.parts.length, 0)}
-          sublabel={`${requests.length} work packages`}
+          label="Active Jobs"
+          value={kpis?.jobsActive ?? 0}
+          sublabel={`${kpis?.jobsInProduction ?? 0} in production · ${kpis?.jobsTotal ?? jobs.length} total`}
+          accent="emerald"
+        />
+        <KpiCard
+          label="Quote Win Rate"
+          value={`${kpis?.winRatePct ?? 0}%`}
+          sublabel={`${kpis?.quotesAccepted ?? 0} accepted · ${kpis?.quotesLost ?? 0} lost`}
+          accent="cyan"
+        />
+        <KpiCard
+          label="Avg Response Time"
+          value={
+            kpis?.avgResponseHours == null
+              ? "—"
+              : `${kpis.avgResponseHours.toFixed(1)}h`
+          }
+          sublabel="Quote-request to submit"
           accent="cyan"
         />
         <KpiCard
           label="Quotes Pending"
           value={pendingQuotes}
-          sublabel="Awaiting your response"
+          sublabel={`${requests.reduce((a, r) => a + r.parts.length, 0)} parts assigned`}
           accent="amber"
-        />
-        <KpiCard
-          label="In Production"
-          value={inProduction}
-          sublabel={`${jobs.length} total jobs`}
-          accent="emerald"
-        />
-        <KpiCard
-          label="Completed"
-          value={complete}
-          sublabel="This partnership to date"
-          accent="slate"
         />
       </KpiGrid>
 

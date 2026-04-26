@@ -1,5 +1,6 @@
 import { getOptionalUser } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { loadAdminKpis, type AdminKpis } from "@/lib/kpis";
 import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
 import {
   KpiCard,
@@ -23,22 +24,16 @@ import {
 
 export const dynamic = "force-dynamic";
 
-interface AdminKpis {
-  programCount: number;
-  rfqCount: number;
-  quoteCount: number;
-  jobCount: number;
-  routedValue: number;
-  inProduction: number;
-}
-
 const PREVIEW_KPIS: AdminKpis = {
   programCount: 15,
   rfqCount: 33,
+  rfqsSubmitted: 28,
   quoteCount: 34,
   jobCount: 12,
-  routedValue: 36400,
+  jobsActive: 8,
   inProduction: 6,
+  routedValue: 36400,
+  supplierUtilization: 42,
 };
 
 type PipelineRow = {
@@ -55,39 +50,6 @@ type PipelineRow = {
       }
     | null;
 };
-
-async function loadKpis(): Promise<AdminKpis | null> {
-  try {
-    const supabase = await createServerSupabase();
-    const [programs, rfqs, quotes, jobs] = await Promise.all([
-      supabase.from("programs").select("id", { count: "exact", head: true }),
-      supabase.from("rfqs").select("id,status", { count: "exact" }),
-      supabase
-        .from("quotes")
-        .select("quoted_price,status,submitted_at", { count: "exact" }),
-      supabase.from("jobs").select("id,status", { count: "exact" }),
-    ]);
-
-    const routedValue = (quotes.data ?? [])
-      .filter((q) => q.status === "accepted")
-      .reduce((acc, q) => acc + (Number(q.quoted_price) || 0), 0);
-
-    const inProduction = (jobs.data ?? []).filter(
-      (j) => j.status === "in_production",
-    ).length;
-
-    return {
-      programCount: programs.count ?? 0,
-      rfqCount: rfqs.count ?? 0,
-      quoteCount: quotes.count ?? 0,
-      jobCount: jobs.count ?? 0,
-      routedValue,
-      inProduction,
-    };
-  } catch {
-    return null;
-  }
-}
 
 async function loadPipelineRows(): Promise<PipelineRow[] | null> {
   try {
@@ -110,7 +72,7 @@ export default async function AdminOverviewPage() {
   const isAdmin = user?.role === "asgard_admin";
 
   const [kpisLive, pipelineLive] = isAdmin
-    ? await Promise.all([loadKpis(), loadPipelineRows()])
+    ? await Promise.all([loadAdminKpis(), loadPipelineRows()])
     : [null, null];
 
   const kpis = kpisLive ?? PREVIEW_KPIS;
@@ -148,22 +110,22 @@ export default async function AdminOverviewPage() {
           accent="cyan"
         />
         <KpiCard
-          label="Active Programs"
-          value={kpis.programCount}
-          sublabel="All buyer programs"
-          accent="emerald"
-        />
-        <KpiCard
-          label="RFQs in Flight"
-          value={kpis.rfqCount}
-          sublabel="Submitted or routing"
+          label="RFQs Submitted"
+          value={kpis.rfqsSubmitted}
+          sublabel={`${kpis.rfqCount} total RFQs on file`}
           accent="amber"
         />
         <KpiCard
-          label="Jobs in Production"
-          value={kpis.inProduction}
-          sublabel={`${kpis.jobCount} total jobs`}
+          label="Jobs Active"
+          value={kpis.jobsActive}
+          sublabel={`${kpis.inProduction} in production · ${kpis.jobCount} total`}
           accent="cyan"
+        />
+        <KpiCard
+          label="Supplier Utilization"
+          value={`${kpis.supplierUtilization}%`}
+          sublabel="Approved suppliers with active jobs"
+          accent="emerald"
         />
       </KpiGrid>
 
