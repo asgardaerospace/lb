@@ -11,6 +11,8 @@ import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
 import {
   Card,
   DataTable,
+  DocumentChain,
+  DocumentsSection,
   StatusBadge,
   mapStatus,
   quoteStatusMap,
@@ -18,6 +20,8 @@ import {
   type Column,
 } from "@/components/ui";
 import { formatCurrency, formatDateTime } from "@/lib/ui/format";
+import { loadDocumentsForPage } from "@/lib/documents/load";
+import { loadDocumentChainForQuote } from "@/lib/documents/chain";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +68,7 @@ export default async function AdminQuoteDetailPage({
   if (!quote) notFound();
 
   const supabase = await createServerSupabase();
-  const [wp, parts, orgRow] = await Promise.all([
+  const [wp, parts, orgRow, quoteDocs] = await Promise.all([
     getWorkPackageById(quote.work_package_id),
     listPartsForWorkPackage(quote.work_package_id),
     supabase
@@ -73,7 +77,9 @@ export default async function AdminQuoteDetailPage({
       .eq("id", quote.supplier_organization_id)
       .maybeSingle()
       .then((r) => r.data as { id: string; name: string } | null),
+    loadDocumentsForPage("quote", quote.id),
   ]);
+  const chain = await loadDocumentChainForQuote(quote.id).catch(() => null);
 
   const { label, tone } = mapStatus(quoteStatusMap, quote.status);
 
@@ -116,6 +122,7 @@ export default async function AdminQuoteDetailPage({
         eyebrow="Admin · Quote Review"
         title={`Quote from ${orgRow?.name ?? "(unknown supplier)"}`}
         subtitle={wp ? `Work package · ${wp.package_name}` : undefined}
+        back={{ href: "/admin/quotes", label: "All quotes" }}
         actions={<StatusBadge tone={tone}>{label}</StatusBadge>}
       />
 
@@ -191,6 +198,33 @@ export default async function AdminQuoteDetailPage({
       <Card>
         <QuoteReviewActions quoteId={quote.id} status={quote.status} />
       </Card>
+
+      <SectionHeader
+        title="Quote attachments"
+        subtitle="Manufacturability notes and supporting docs from the supplier."
+      />
+      <Card>
+        <DocumentsSection
+          entityType="quote"
+          entityId={quote.id}
+          canUpload
+          storageReady={quoteDocs.storageReady}
+          initialDocuments={quoteDocs.documents}
+          emptyHint="Supplier has not attached any documents to this quote."
+        />
+      </Card>
+
+      {chain && (
+        <>
+          <SectionHeader
+            title="Document chain"
+            subtitle="Every document linked along this RFQ → Quote lineage, in one place."
+          />
+          <Card>
+            <DocumentChain snapshot={chain} />
+          </Card>
+        </>
+      )}
     </>
   );
 }

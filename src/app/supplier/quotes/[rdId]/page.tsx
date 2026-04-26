@@ -9,6 +9,8 @@ import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
 import {
   Card,
   DataTable,
+  DocumentChain,
+  DocumentsSection,
   RequiresLiveData,
   StatusBadge,
   WorkflowStepper,
@@ -16,6 +18,8 @@ import {
 } from "@/components/ui";
 import { formatDate } from "@/lib/ui/format";
 import { AuthError } from "@/lib/auth";
+import { loadDocumentsForPage } from "@/lib/documents/load";
+import { loadDocumentChainForQuote } from "@/lib/documents/chain";
 
 export const dynamic = "force-dynamic";
 
@@ -92,10 +96,17 @@ export default async function SupplierQuoteDetailPage({
     required_delivery_date: string | null;
   } | null;
 
-  const [parts, existing] = await Promise.all([
+  const [parts, existing, rfqDocs] = await Promise.all([
     listPartsForWorkPackage(wp.id),
     getQuoteFor(wp.id, user.organization_id),
+    loadDocumentsForPage("rfq", wp.rfq_id),
   ]);
+  const quoteDocs = existing
+    ? await loadDocumentsForPage("quote", existing.id)
+    : { documents: [], storageReady: rfqDocs.storageReady };
+  const chain = existing
+    ? await loadDocumentChainForQuote(existing.id).catch(() => null)
+    : null;
 
   const canAct = user.role === "supplier_admin";
 
@@ -138,6 +149,7 @@ export default async function SupplierQuoteDetailPage({
         eyebrow={`Supplier · Quote${wp.package_name ? ` · ${wp.package_name}` : ""}`}
         title={rfq?.rfq_title ?? "Quote request"}
         subtitle={wp.description ?? undefined}
+        back={{ href: "/supplier/quote-requests", label: "Quote requests" }}
         actions={
           rfq ? (
             <div className="flex gap-1.5">
@@ -189,6 +201,52 @@ export default async function SupplierQuoteDetailPage({
           canAct={canAct}
         />
       </Card>
+
+      <SectionHeader
+        title="Buyer-supplied documents"
+        subtitle="CAD, drawings, and specifications attached to this RFQ."
+      />
+      <Card>
+        <DocumentsSection
+          entityType="rfq"
+          entityId={wp.rfq_id}
+          canUpload={false}
+          storageReady={rfqDocs.storageReady}
+          initialDocuments={rfqDocs.documents}
+          emptyHint="No buyer documents attached to this RFQ yet."
+        />
+      </Card>
+
+      {existing && (
+        <>
+          <SectionHeader
+            title="Quote attachments"
+            subtitle="Manufacturability notes and supporting documents you've attached to your response."
+          />
+          <Card>
+            <DocumentsSection
+              entityType="quote"
+              entityId={existing.id}
+              canUpload={canAct}
+              storageReady={quoteDocs.storageReady}
+              initialDocuments={quoteDocs.documents}
+              emptyHint="No quote attachments yet."
+            />
+          </Card>
+        </>
+      )}
+
+      {chain && (
+        <>
+          <SectionHeader
+            title="Document chain"
+            subtitle="Every document linked along this RFQ → Quote lineage."
+          />
+          <Card>
+            <DocumentChain snapshot={chain} />
+          </Card>
+        </>
+      )}
     </>
   );
 }

@@ -8,6 +8,7 @@ import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
 import {
   Card,
   DataTable,
+  DocumentsSection,
   StatusBadge,
   mapStatus,
   rfqStatusMap,
@@ -15,6 +16,7 @@ import {
   WorkflowStepper,
   type Column,
 } from "@/components/ui";
+import { loadDocumentsForPage } from "@/lib/documents/load";
 
 export const dynamic = "force-dynamic";
 
@@ -60,9 +62,10 @@ export default async function RoutingRfqPage({
   }
   if (!rfq) notFound();
 
-  const [parts, packages] = await Promise.all([
+  const [parts, packages, docs] = await Promise.all([
     listPartsForRfq(id),
     listWorkPackagesForRfq(id),
+    loadDocumentsForPage("rfq", id),
   ]);
 
   const { label, tone } = mapStatus(rfqStatusMap, rfq.status);
@@ -113,6 +116,7 @@ export default async function RoutingRfqPage({
         eyebrow="Admin · Routing Engine"
         title={rfq.rfq_title}
         subtitle="Assemble work packages, select candidate suppliers, and trigger quote requests."
+        back={{ href: "/admin/routing", label: "Routing Queue" }}
         actions={
           <div className="flex gap-1.5">
             <StatusBadge tone={tone}>{label}</StatusBadge>
@@ -191,6 +195,23 @@ export default async function RoutingRfqPage({
       <Card>
         <WorkPackageCreateForm rfqId={id} />
       </Card>
+
+      <div className="mt-6">
+        <SectionHeader
+          title="RFQ documents"
+          subtitle="CAD and specifications attached by the buyer — visible to routed suppliers."
+        />
+        <Card>
+          <DocumentsSection
+            entityType="rfq"
+            entityId={id}
+            canUpload
+            storageReady={docs.storageReady}
+            initialDocuments={docs.documents}
+            emptyHint="Buyer has not attached any documents to this RFQ."
+          />
+        </Card>
+      </div>
     </>
   );
 }

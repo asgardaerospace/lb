@@ -7,13 +7,16 @@ import {
 } from "@/lib/rfq/repository";
 import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
 import {
+  Card,
   DataTable,
+  DocumentsSection,
   StatusBadge,
   mapStatus,
   rfqStatusMap,
   RequiresLiveData,
   type Column,
 } from "@/components/ui";
+import { loadDocumentsForPage } from "@/lib/documents/load";
 
 export const dynamic = "force-dynamic";
 
@@ -58,9 +61,10 @@ export default async function AdminRfqDetailPage({
     );
   }
   if (!rfq) notFound();
-  const [program, parts] = await Promise.all([
+  const [program, parts, docs] = await Promise.all([
     getProgramById(rfq.program_id),
     listPartsForRfq(id),
+    loadDocumentsForPage("rfq", id),
   ]);
 
   const { label, tone } = mapStatus(rfqStatusMap, rfq.status);
@@ -111,6 +115,7 @@ export default async function AdminRfqDetailPage({
         eyebrow={`Admin · RFQ${program ? ` · ${program.program_name}` : ""}`}
         title={rfq.rfq_title}
         subtitle={rfq.description ?? undefined}
+        back={{ href: "/admin/rfqs", label: "RFQ Inbox" }}
         actions={
           <div className="flex gap-1.5">
             <StatusBadge tone={tone}>{label}</StatusBadge>
@@ -132,6 +137,23 @@ export default async function AdminRfqDetailPage({
         rowKey={(p) => p.id}
         emptyTitle="No parts on this RFQ"
       />
+
+      <div className="mt-6">
+        <SectionHeader
+          title="RFQ documents"
+          subtitle="CAD and specifications attached by the buyer."
+        />
+        <Card>
+          <DocumentsSection
+            entityType="rfq"
+            entityId={id}
+            canUpload={false}
+            storageReady={docs.storageReady}
+            initialDocuments={docs.documents}
+            emptyHint="Buyer has not attached any documents to this RFQ."
+          />
+        </Card>
+      </div>
     </>
   );
 }
