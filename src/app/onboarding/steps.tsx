@@ -200,8 +200,8 @@ export function CompanyStep({
           </Button>
         }
       >
-        <div className="overflow-hidden rounded-md border border-slate-800">
-          <table className="w-full text-[13px]">
+        <div className="overflow-x-auto rounded-md border border-slate-800">
+          <table className="w-full min-w-[640px] text-[13px]">
             <thead>
               <tr className="bg-slate-950/40 text-[10.5px] uppercase tracking-[0.08em] text-slate-400">
                 <th className="px-3.5 py-2.5 text-left font-semibold">Role</th>
@@ -269,50 +269,56 @@ export function ProgramsStep({
         {data.types.map((t) => (
           <div
             key={t.id}
-            className={`grid items-center gap-4 rounded-lg border bg-slate-900/50 p-4 ${
+            className={`rounded-lg border bg-slate-900/50 p-4 ${
               t.on ? "border-cyan-500/35" : "border-slate-800"
             }`}
-            style={{ gridTemplateColumns: "24px 220px 200px 150px 1fr" }}
           >
-            <Checkbox
-              checked={t.on}
-              onChange={(e) => togType(t.id, { on: e.target.checked })}
-            />
-            <div>
-              <div className="text-[14px] font-medium text-slate-100">
-                {t.label}
-              </div>
-              <div className="mt-0.5 font-mono text-[11px] tracking-wider text-slate-500">
-                cat_{t.id}
+            <div className="flex items-start gap-3">
+              <Checkbox
+                checked={t.on}
+                onChange={(e) => togType(t.id, { on: e.target.checked })}
+                className="mt-1"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] font-medium text-slate-100">
+                  {t.label}
+                </div>
+                <div className="mt-0.5 font-mono text-[11px] tracking-wider text-slate-500">
+                  cat_{t.id}
+                </div>
               </div>
             </div>
-            <Select
-              disabled={!t.on}
-              value={t.stage}
-              onChange={(e) =>
-                togType(t.id, { stage: e.target.value as ProgramStage })
-              }
-            >
-              {STAGES.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
-            <TextInput
-              mono
-              tnum
-              disabled={!t.on}
-              placeholder="Annual vol"
-              value={t.annual_volume}
-              onChange={(e) => togType(t.id, { annual_volume: e.target.value })}
-            />
-            <TextInput
-              disabled={!t.on}
-              placeholder="Notes — variants, payload class, MTOW…"
-              value={t.notes}
-              onChange={(e) => togType(t.id, { notes: e.target.value })}
-            />
+            <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-[200px_140px_1fr]">
+              <Select
+                disabled={!t.on}
+                value={t.stage}
+                onChange={(e) =>
+                  togType(t.id, { stage: e.target.value as ProgramStage })
+                }
+              >
+                {STAGES.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </Select>
+              <TextInput
+                mono
+                tnum
+                disabled={!t.on}
+                placeholder="Annual vol"
+                value={t.annual_volume}
+                onChange={(e) =>
+                  togType(t.id, { annual_volume: e.target.value })
+                }
+              />
+              <TextInput
+                disabled={!t.on}
+                placeholder="Notes — variants, payload class, MTOW…"
+                value={t.notes}
+                onChange={(e) => togType(t.id, { notes: e.target.value })}
+              />
+            </div>
           </div>
         ))}
       </div>

@@ -127,10 +127,17 @@ const SCREENS: Record<Exclude<Role, "all">, Screen[]> = {
   ],
   buyer: [
     {
-      title: "Customer Onboarding",
+      title: "Customer Onboarding (Apply)",
       href: "/onboarding",
       description:
-        "9-step intake — company, programs, mfg, compliance, posture, supply chain, data, first-use, review.",
+        "9-step intake — company, programs, mfg, compliance, posture, supply chain, data, first-use, review. Drafts persist in browser. Alias: /apply/customer.",
+      status: "preview",
+    },
+    {
+      title: "Onboarding · Confirmation",
+      href: "/onboarding/confirmation",
+      description:
+        "Post-submission state — provisioning checklist + CTAs. Reads the latest local draft snapshot.",
       status: "preview",
     },
     {
@@ -270,7 +277,7 @@ const WALKTHROUGHS: Walkthrough[] = [
 const SCENARIOS: Scenario[] = [
   {
     title: "New customer onboarding intake",
-    body: "Multi-step configuration wizard — operational vocabulary, derived workspace tier, supplier filter rules.",
+    body: "Multi-step configuration wizard at /onboarding (alias /apply/customer). Drafts auto-persist locally; reset clears them.",
     role: "buyer",
     href: "/onboarding",
   },
