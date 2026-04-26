@@ -119,6 +119,7 @@ export default async function ProgramDetailPage({
         eyebrow="Buyer · Program Detail"
         title={program.program_name}
         subtitle={program.description ?? undefined}
+        back={{ href: "/buyer/programs", label: "All programs" }}
         actions={
           <div className="flex flex-wrap gap-1.5">
             <StatusBadge

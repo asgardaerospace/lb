@@ -1,16 +1,29 @@
+import { BackLink } from "@/components/ui/BackLink";
+
 interface PageHeaderProps {
   eyebrow?: string;
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  /** Renders a "← back" link above the eyebrow. Use on detail screens. */
+  back?: { href: string; label?: string };
 }
 
-export function PageHeader({ eyebrow, title, subtitle, actions }: PageHeaderProps) {
+export function PageHeader({
+  eyebrow,
+  title,
+  subtitle,
+  actions,
+  back,
+}: PageHeaderProps) {
   return (
     <section className="hero-sheen relative mb-6 overflow-hidden rounded-xl border border-slate-800/80">
       <div className="grid-bg absolute inset-0 opacity-60" aria-hidden />
       <div className="relative flex items-end justify-between gap-4 px-6 py-7">
         <div className="min-w-0">
+          {back && (
+            <BackLink href={back.href} label={back.label ?? "Back"} className="mb-1" />
+          )}
           {eyebrow && (
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-400">
               {eyebrow}

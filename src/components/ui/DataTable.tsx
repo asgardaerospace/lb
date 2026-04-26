@@ -14,6 +14,8 @@ interface DataTableProps<T> {
   rowKey: (row: T, index: number) => string;
   emptyTitle?: string;
   emptyBody?: string;
+  /** CTA shown inside the empty state — keeps list pages from being dead ends. */
+  emptyAction?: React.ReactNode;
   previewBanner?: boolean;
   dense?: boolean;
 }
@@ -24,11 +26,12 @@ export function DataTable<T>({
   rowKey,
   emptyTitle = "No records",
   emptyBody,
+  emptyAction,
   previewBanner,
   dense,
 }: DataTableProps<T>) {
   if (rows.length === 0) {
-    return <EmptyState title={emptyTitle} body={emptyBody} />;
+    return <EmptyState title={emptyTitle} body={emptyBody} action={emptyAction} />;
   }
 
   const cellPad = dense ? "px-3 py-2" : "px-4 py-2.5";

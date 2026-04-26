@@ -73,7 +73,12 @@ export default async function SupplierQuoteRequestsPage() {
       ) : live!.length === 0 ? (
         <EmptyState
           title="No active quote requests"
-          body="When an Asgard operator routes a work package to your organization it will appear here."
+          body="When an Asgard operator routes a work package to your organization it will appear here. While you wait, check your equipment list — keeping it current improves routing match quality."
+          action={
+            <LinkButton href="/supplier/equipment" variant="secondary" size="sm">
+              Review equipment →
+            </LinkButton>
+          }
         />
       ) : (
         <div className="space-y-5">

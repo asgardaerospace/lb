@@ -15,6 +15,7 @@ export default async function NewProgramPage() {
         eyebrow="Buyer · Program Submission"
         title="Submit Program"
         subtitle="Define a new aerospace program and establish system-level manufacturing context. The program becomes the parent container for RFQs, parts, and production activity."
+        back={{ href: "/buyer/programs", label: "All programs" }}
       />
       {!isBuyer && (
         <PreviewDataBanner reason="No buyer session — form below renders for layout review but submissions will be rejected by the API." />

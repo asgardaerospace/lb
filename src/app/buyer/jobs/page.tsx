@@ -3,6 +3,7 @@ import { listJobsForBuyer } from "@/lib/jobs/repository";
 import { PageHeader } from "@/components/shell/PageHeader";
 import {
   DataTable,
+  LinkButton,
   StatusBadge,
   mapStatus,
   jobStatusMap,
@@ -166,7 +167,12 @@ export default async function BuyerJobsPage() {
         rows={jobs}
         rowKey={(j) => j.id}
         emptyTitle="No jobs yet"
-        emptyBody="Once suppliers accept quotes against your RFQs, their jobs will appear here with live progress."
+        emptyBody="Once suppliers accept quotes against your RFQs, their jobs will appear here with live progress. Start by submitting an RFQ inside one of your programs."
+        emptyAction={
+          <LinkButton href="/buyer/programs" variant="primary" size="sm">
+            View programs →
+          </LinkButton>
+        }
         previewBanner={previewMode}
       />
     </>

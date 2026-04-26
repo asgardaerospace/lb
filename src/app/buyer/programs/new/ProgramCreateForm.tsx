@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui";
+import { Banner, Button } from "@/components/ui";
 
 const MISSION_TYPES = [
   "Aviation",
@@ -145,11 +145,7 @@ export default function ProgramCreateForm() {
         </div>
       </Field>
 
-      {error && (
-        <p className="rounded-md border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-          {error}
-        </p>
-      )}
+      {error && <Banner tone="error">{error}</Banner>}
 
       <div className="flex items-center justify-end gap-2 border-t border-slate-800 pt-4">
         <Button

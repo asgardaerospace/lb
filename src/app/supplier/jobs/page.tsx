@@ -4,6 +4,7 @@ import { listJobsForSupplier } from "@/lib/jobs/repository";
 import { PageHeader } from "@/components/shell/PageHeader";
 import {
   DataTable,
+  LinkButton,
   StatusBadge,
   mapStatus,
   jobStatusMap,
@@ -169,7 +170,12 @@ export default async function SupplierJobsPage() {
         rows={jobs}
         rowKey={(j) => j.id}
         emptyTitle="No assigned jobs"
-        emptyBody="Accepted quotes become jobs."
+        emptyBody="Accepted quotes become jobs. Submit a competitive quote on an open request to get on the production schedule."
+        emptyAction={
+          <LinkButton href="/supplier/quote-requests" variant="primary" size="sm">
+            View open quote requests →
+          </LinkButton>
+        }
         previewBanner={previewMode}
       />
     </>
