@@ -53,6 +53,7 @@ export const supplierNav: NavItem[] = [
   { label: "Quotes", href: "/supplier/quotes", icon: ICONS.dollar },
   { label: "Jobs", href: "/supplier/jobs", icon: ICONS.factory },
   { label: "Company Profile", href: "/supplier/profile", icon: ICONS.cog },
+  { label: "Application", href: "/supplier/application", icon: ICONS.clipboard },
   { label: "Equipment", href: "/supplier/equipment", icon: ICONS.box },
 ];
 
