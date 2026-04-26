@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
 import { errorResponse } from "@/lib/api";
 import { logAuditEvent } from "@/lib/audit";
+import { notifyJobStatusUpdated } from "@/lib/notifications/dispatch";
 import { getJobById, updateJob } from "@/lib/jobs/repository";
+import { recordStepBestEffort } from "@/lib/traveler/repository";
+import { travelerStepForJobStatus } from "@/lib/traveler/types";
 import { canSupplierTransition } from "@/lib/jobs/state";
 import { sideEffectDates } from "@/lib/jobs/transitions";
 import { statusUpdateSchema } from "@/lib/jobs/types";
@@ -51,6 +54,25 @@ export async function POST(
         completed_date: updated.completed_date,
         note: note ?? null,
       },
+    });
+
+    const travelerStep = travelerStepForJobStatus(status);
+    if (travelerStep) {
+      await recordStepBestEffort({
+        job_id: updated.id,
+        step: travelerStep,
+        completed_by: user.id,
+        note: note ?? null,
+      });
+    }
+
+    await notifyJobStatusUpdated({
+      jobId: updated.id,
+      jobNumber: updated.job_number,
+      newStatus: status,
+      actorUserId: user.id,
+      actorRole: user.role,
+      supplierOrgId: updated.supplier_organization_id,
     });
 
     return NextResponse.json({ job: updated });
