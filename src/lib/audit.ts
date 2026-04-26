@@ -18,7 +18,15 @@ export type AuditAction =
   | "job.created"
   | "job.status_updated"
   | "job.status_overridden"
-  | "job.issue_flagged";
+  | "job.issue_flagged"
+  | "document.uploaded"
+  | "document.downloaded"
+  | "machine.created"
+  | "machine.updated"
+  | "machine.deleted"
+  | "capability.created"
+  | "capability.updated"
+  | "capability.deleted";
 
 export type AuditEntityType =
   | "supplier_profile"
@@ -27,7 +35,10 @@ export type AuditEntityType =
   | "work_package"
   | "routing_decision"
   | "quote"
-  | "job";
+  | "job"
+  | "document"
+  | "machine"
+  | "capability";
 
 export interface AuditEvent {
   action: AuditAction;

@@ -1,6 +1,7 @@
 import { getOptionalUser } from "@/lib/auth";
 import { PageHeader } from "@/components/shell/PageHeader";
 import {
+  Banner,
   DataTable,
   KpiCard,
   KpiGrid,
@@ -9,15 +10,66 @@ import {
   type Column,
 } from "@/components/ui";
 import { PREVIEW_COMPANIES } from "@/lib/ui/mock";
+import {
+  listOrganizationsForDirectory,
+  type OrganizationDirectoryRow,
+} from "@/lib/organizations/repository";
+import { CompaniesTable } from "./CompaniesTable";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminCompaniesPage() {
-  // UI preview surface — no backend data is loaded. Resolve the user
-  // optionally so the page renders cleanly on environments without a
-  // Supabase session or env vars.
-  await getOptionalUser();
+  const user = await getOptionalUser();
 
+  if (user?.role !== "asgard_admin") {
+    return <PreviewView />;
+  }
+
+  let organizations: OrganizationDirectoryRow[] = [];
+  let loadError: string | null = null;
+  try {
+    organizations = await listOrganizationsForDirectory();
+  } catch (err) {
+    loadError = err instanceof Error ? err.message : "Could not load directory";
+  }
+
+  const buyers = organizations.filter((o) => o.type === "buyer").length;
+  const suppliers = organizations.filter((o) => o.type === "supplier").length;
+  const itar = organizations.filter((o) => o.itar_registered).length;
+  const approvedSuppliers = organizations.filter(
+    (o) => o.type === "supplier" && o.supplier_approval_status === "approved",
+  ).length;
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Admin · Directory"
+        title="Companies"
+        subtitle="Buyers and suppliers registered on Launchbelt."
+      />
+
+      {loadError && (
+        <div className="mb-4">
+          <Banner tone="error" title="Could not load directory">
+            {loadError}
+          </Banner>
+        </div>
+      )}
+
+      <KpiGrid>
+        <KpiCard label="Total companies" value={organizations.length} accent="cyan" />
+        <KpiCard label="Buyers" value={buyers} accent="emerald" />
+        <KpiCard label="Suppliers" value={suppliers} accent="cyan" />
+        <KpiCard label="Approved suppliers" value={approvedSuppliers} accent="emerald" />
+        <KpiCard label="ITAR-registered" value={itar} accent="amber" />
+      </KpiGrid>
+
+      <CompaniesTable rows={organizations} />
+    </>
+  );
+}
+
+function PreviewView() {
   type Row = (typeof PREVIEW_COMPANIES)[number];
 
   const buyers = PREVIEW_COMPANIES.filter((c) => c.type === "buyer").length;
@@ -75,7 +127,7 @@ export default async function AdminCompaniesPage() {
         subtitle="Buyers and suppliers registered on Launchbelt."
       />
 
-      <PreviewDataBanner reason="Directory is a UI preview — no organizations endpoint is wired yet. Production data will populate once the endpoint ships." />
+      <PreviewDataBanner reason="Sign in as an Asgard admin to view the live directory. This screen is illustrative." />
 
       <KpiGrid>
         <KpiCard label="Total companies" value={PREVIEW_COMPANIES.length} accent="cyan" />
