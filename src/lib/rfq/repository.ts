@@ -14,7 +14,7 @@ const PROGRAM_COLUMNS =
   "id, buyer_organization_id, program_name, program_type, description, compliance_level, itar_controlled, cui_controlled, status, created_at, updated_at, created_by";
 
 const RFQ_COLUMNS =
-  "id, program_id, rfq_title, description, quantity, required_delivery_date, priority, status, submitted_at, created_at, updated_at, created_by";
+  "id, program_id, rfq_title, description, quantity, required_delivery_date, priority, status, itar_override, cui_override, submitted_at, created_at, updated_at, created_by";
 
 const PART_COLUMNS =
   "id, rfq_id, part_number, part_name, revision, material, process_required, quantity, tolerance_notes, finish_requirements, inspection_requirements, created_at, updated_at, created_by";
@@ -85,6 +85,8 @@ export async function createRfq(
       quantity: input.quantity ?? null,
       required_delivery_date: input.required_delivery_date ?? null,
       priority: input.priority ?? "normal",
+      itar_override: input.itar_override ?? null,
+      cui_override: input.cui_override ?? null,
     })
     .select(RFQ_COLUMNS)
     .single();

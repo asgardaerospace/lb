@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui";
 import type { Part, Rfq } from "@/lib/rfq/types";
 
 interface Props {
@@ -21,12 +22,59 @@ const EMPTY_PART = {
   inspection_requirements: "",
 };
 
+type OverrideValue = "inherit" | "true" | "false";
+
+function overrideToValue(v: boolean | null): OverrideValue {
+  if (v === true) return "true";
+  if (v === false) return "false";
+  return "inherit";
+}
+
+function valueToOverride(v: OverrideValue): boolean | null {
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return null;
+}
+
 export default function RfqEditor({ rfq, initialParts }: Props) {
   const router = useRouter();
+  const { toast } = useToast();
   const [parts, setParts] = useState<Part[]>(initialParts);
   const [form, setForm] = useState<typeof EMPTY_PART>(EMPTY_PART);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [itarOverride, setItarOverride] = useState<OverrideValue>(
+    overrideToValue(rfq.itar_override),
+  );
+  const [cuiOverride, setCuiOverride] = useState<OverrideValue>(
+    overrideToValue(rfq.cui_override),
+  );
+
+  async function saveOverride(field: "itar_override" | "cui_override", value: OverrideValue) {
+    const payload: Record<string, boolean | null> = {
+      [field]: valueToOverride(value),
+    };
+    try {
+      const res = await fetch(`/api/buyer/rfqs/${rfq.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Save failed");
+      toast({
+        tone: "success",
+        title: `${field === "itar_override" ? "ITAR" : "CUI"} setting updated`,
+      });
+      router.refresh();
+    } catch (err) {
+      toast({
+        tone: "error",
+        title: "Could not update compliance",
+        body: err instanceof Error ? err.message : "Save failed",
+      });
+    }
+  }
 
   const editable = rfq.status === "draft";
 
@@ -107,6 +155,36 @@ export default function RfqEditor({ rfq, initialParts }: Props) {
 
   return (
     <div className="space-y-8">
+      <section>
+        <h2 className="mb-3 text-lg font-medium">Compliance</h2>
+        <p className="mb-3 text-xs text-slate-500">
+          Per-RFQ override for ITAR + CUI. Leave on &ldquo;Inherit from
+          program&rdquo; to use the parent program&apos;s flag, or override
+          either way for this specific RFQ. Routing scoring honors the
+          effective value.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <ComplianceSelect
+            label="ITAR"
+            value={itarOverride}
+            disabled={!editable}
+            onChange={(v) => {
+              setItarOverride(v);
+              void saveOverride("itar_override", v);
+            }}
+          />
+          <ComplianceSelect
+            label="CUI"
+            value={cuiOverride}
+            disabled={!editable}
+            onChange={(v) => {
+              setCuiOverride(v);
+              void saveOverride("cui_override", v);
+            }}
+          />
+        </div>
+      </section>
+
       <section>
         <h2 className="mb-3 text-lg font-medium">Parts ({parts.length})</h2>
         {parts.length === 0 ? (
@@ -263,6 +341,36 @@ export default function RfqEditor({ rfq, initialParts }: Props) {
         ) : null}
       </section>
     </div>
+  );
+}
+
+function ComplianceSelect({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: OverrideValue;
+  disabled?: boolean;
+  onChange: (v: OverrideValue) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+        {label}
+      </span>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value as OverrideValue)}
+        className="w-full rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 focus:border-cyan-500/50 focus:outline-none disabled:opacity-50"
+      >
+        <option value="inherit">Inherit from program</option>
+        <option value="true">Required for this RFQ</option>
+        <option value="false">Not required for this RFQ</option>
+      </select>
+    </label>
   );
 }
 

@@ -28,6 +28,9 @@ export interface Rfq {
   required_delivery_date: string | null;
   priority: RfqPriority;
   status: RfqStatus;
+  /** null = inherit program flag; true/false override at the RFQ level. */
+  itar_override: boolean | null;
+  cui_override: boolean | null;
   submitted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -72,6 +75,8 @@ export const rfqCreateSchema = z.object({
     .nullable()
     .optional(),
   priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
+  itar_override: z.boolean().nullable().optional(),
+  cui_override: z.boolean().nullable().optional(),
 });
 
 export const rfqUpdateSchema = rfqCreateSchema.partial();
