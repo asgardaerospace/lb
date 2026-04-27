@@ -4,6 +4,11 @@ import { getCustomerApplicationFull } from "@/lib/customer-application/repositor
 import { getLatestFitScore } from "@/lib/customer-application/scoring-repository";
 import { getMaterializedBundleForApplication } from "@/lib/customer-application/conversion-repository";
 import {
+  listInviteHistoryForOrganization,
+  listUsersForOrganization,
+} from "@/lib/customer-application/invite-repository";
+import { CustomerAccessPanel } from "./CustomerAccessPanel";
+import {
   priorityLabel,
   priorityTone,
   scoreCustomerApplication,
@@ -85,6 +90,21 @@ export default async function CustomerApplicationDetailPage({
     getLatestFitScore(a.id).catch(() => null),
     getMaterializedBundleForApplication(a.id).catch(() => null),
   ]);
+
+  const [inviteHistory, orgUsers] = bundle
+    ? await Promise.all([
+        listInviteHistoryForOrganization(bundle.organization.id).catch(
+          () => [],
+        ),
+        listUsersForOrganization(bundle.organization.id).catch(() => []),
+      ])
+    : [[], []];
+
+  const defaultInviteEmail =
+    full.contacts.find((c) => c.role === "primary")?.email ??
+    full.contacts.find((c) => !!c.email)?.email ??
+    a.intake_email ??
+    "";
   const display = stored
     ? {
         composite: stored.composite_score,
@@ -295,8 +315,17 @@ export default async function CustomerApplicationDetailPage({
             )}
 
             <p className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-slate-500">
-              Workspace provisioning is the next operational step (Phase 5).
+              Provision a customer admin below to give the buyer team login
+              access. Workspace SSO / DNS provisioning still pending.
             </p>
+
+            <CustomerAccessPanel
+              applicationId={a.id}
+              defaultEmail={defaultInviteEmail}
+              initialUsers={orgUsers}
+              initialHistory={inviteHistory}
+              organizationName={bundle.organization.name}
+            />
           </Card>
 
           <div className="h-5" />
