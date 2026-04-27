@@ -1,6 +1,14 @@
 import { notFound } from "next/navigation";
 import { getOptionalUser } from "@/lib/auth";
 import { getCustomerApplicationFull } from "@/lib/customer-application/repository";
+import { getLatestFitScore } from "@/lib/customer-application/scoring-repository";
+import {
+  priorityLabel,
+  priorityTone,
+  scoreCustomerApplication,
+  type DerivedPriority,
+  type DimensionKey,
+} from "@/lib/customer-application/scoring";
 import type {
   CustomerApplicationFull,
   CustomerApplicationStatus,
@@ -65,6 +73,38 @@ export default async function CustomerApplicationDetailPage({
   if (!full) notFound();
 
   const a = full.application;
+
+  // Always compute the live derivation (cheap, deterministic) so the panel
+  // can show risk flags + recommended focus even when no stored row exists.
+  // The stored row is the persisted record — its composite + dimensions
+  // come from a prior compute and may be stale if the application was
+  // edited after scoring.
+  const live = scoreCustomerApplication(full);
+  const stored = await getLatestFitScore(a.id).catch(() => null);
+  const display = stored
+    ? {
+        composite: stored.composite_score,
+        priority: (stored.derived_priority ?? "review") as DerivedPriority,
+        dimensions: live.dimensions.map((d) => ({
+          ...d,
+          score:
+            (stored.dimensions[d.key as DimensionKey] as number | undefined) ??
+            d.score,
+        })),
+        riskFlags: live.riskFlags,
+        recommendedFocus: live.recommendedFocus,
+        computedAt: stored.computed_at,
+        scored: true as const,
+      }
+    : {
+        composite: live.composite,
+        priority: live.priority,
+        dimensions: live.dimensions,
+        riskFlags: live.riskFlags,
+        recommendedFocus: live.recommendedFocus,
+        computedAt: null as string | null,
+        scored: false as const,
+      };
   const { label, tone } = mapStatus(customerApplicationStatusMap, a.status);
   const tierTone = a.derived_tier
     ? customerTierToneMap[a.derived_tier] ?? "neutral"
@@ -120,6 +160,101 @@ export default async function CustomerApplicationDetailPage({
           <span className="tabular-nums">{a.suppliers_per_part}</span>
         </KvCard>
       </div>
+
+      {/* Customer fit score */}
+      <SectionHeader
+        title="Customer fit score"
+        subtitle={
+          display.scored
+            ? `Stored ${new Date(display.computedAt!).toLocaleString()} · refresh from the review actions panel below.`
+            : "Not yet scored. Below is the live preview that will be persisted on first review."
+        }
+      />
+      <Card>
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+          <div className="flex shrink-0 flex-col items-center gap-1 rounded-lg border border-slate-800 bg-slate-950/40 px-5 py-4">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">
+              Composite
+            </span>
+            <span className="text-3xl font-semibold tabular-nums text-slate-100">
+              {display.composite}
+            </span>
+            <StatusBadge tone={priorityTone(display.priority)} dot={false}>
+              {priorityLabel(display.priority)}
+            </StatusBadge>
+            {!display.scored && (
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-amber-300">
+                Live preview
+              </span>
+            )}
+          </div>
+          <div className="flex-1 space-y-2">
+            {display.dimensions.map((d) => (
+              <div key={d.key}>
+                <div className="flex items-baseline justify-between gap-3 font-mono text-[11px] uppercase tracking-[0.06em]">
+                  <span className="text-slate-300">{d.label}</span>
+                  <span className="text-slate-500">
+                    weight {d.weight}% ·{" "}
+                    <span className="tabular-nums text-slate-200">
+                      {d.score}/100
+                    </span>
+                  </span>
+                </div>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-sm bg-slate-800">
+                  <div
+                    className="h-full bg-cyan-400"
+                    style={{ width: `${d.score}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-[11.5px] leading-snug text-slate-500">
+                  {d.detail}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+              Risk flags ({display.riskFlags.length})
+            </div>
+            {display.riskFlags.length === 0 ? (
+              <p className="mt-1 text-xs text-slate-400">
+                No risks raised by the scorer.
+              </p>
+            ) : (
+              <ul className="mt-1.5 space-y-1.5">
+                {display.riskFlags.map((f, i) => (
+                  <li
+                    key={i}
+                    className="rounded-md border border-amber-500/25 bg-amber-500/[0.04] px-3 py-1.5 text-[12px] leading-snug text-amber-200"
+                  >
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+              Recommended review focus
+            </div>
+            <ul className="mt-1.5 space-y-1.5">
+              {display.recommendedFocus.map((f, i) => (
+                <li
+                  key={i}
+                  className="rounded-md border border-cyan-500/20 bg-cyan-500/[0.04] px-3 py-1.5 text-[12px] leading-snug text-cyan-100"
+                >
+                  {f}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </Card>
+
+      <div className="h-5" />
 
       {/* Compliance flags */}
       <SectionHeader

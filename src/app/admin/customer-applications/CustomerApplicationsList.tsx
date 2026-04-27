@@ -16,6 +16,12 @@ import type {
   CustomerApplicationStatus,
   CustomerTier,
 } from "@/lib/customer-application/types";
+import type { StoredFitScore } from "@/lib/customer-application/scoring-repository";
+import {
+  priorityLabel,
+  priorityTone,
+  type DerivedPriority,
+} from "@/lib/customer-application/scoring";
 
 const STATUS_FILTERS: { value: "all" | CustomerApplicationStatus; label: string }[] = [
   { value: "all", label: "All statuses" },
@@ -38,9 +44,11 @@ const TIER_FILTERS: { value: "all" | CustomerTier; label: string }[] = [
 export function CustomerApplicationsList({
   rows,
   previewMode,
+  scores,
 }: {
   rows: CustomerApplicationListRow[];
   previewMode: boolean;
+  scores: Record<string, StoredFitScore>;
 }) {
   const [statusFilter, setStatusFilter] =
     useState<(typeof STATUS_FILTERS)[number]["value"]>("all");
@@ -125,6 +133,32 @@ export function CustomerApplicationsList({
           )}
         </div>
       ),
+    },
+    {
+      key: "score",
+      header: "Fit score",
+      align: "right",
+      render: (r) => {
+        const s = scores[r.id];
+        if (!s) {
+          return <span className="text-xs text-slate-600">— not scored</span>;
+        }
+        const tone = priorityTone(
+          (s.derived_priority ?? "review") as DerivedPriority,
+        );
+        return (
+          <div className="flex items-center justify-end gap-2">
+            <span className="font-mono text-sm tabular-nums text-slate-100">
+              {s.composite_score}
+            </span>
+            <StatusBadge tone={tone} dot={false}>
+              {priorityLabel(
+                (s.derived_priority ?? "review") as DerivedPriority,
+              )}
+            </StatusBadge>
+          </div>
+        );
+      },
     },
     {
       key: "submitted",

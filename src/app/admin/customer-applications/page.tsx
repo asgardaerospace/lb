@@ -1,7 +1,12 @@
 import { getOptionalUser } from "@/lib/auth";
 import { listCustomerApplications } from "@/lib/customer-application/repository";
-import { PREVIEW_CUSTOMER_APPLICATIONS } from "@/lib/customer-application/preview";
+import {
+  PREVIEW_CUSTOMER_APPLICATIONS,
+  PREVIEW_CUSTOMER_APPLICATION_SCORES,
+} from "@/lib/customer-application/preview";
+import { getLatestFitScoresForApplications } from "@/lib/customer-application/scoring-repository";
 import type { CustomerApplicationListRow } from "@/lib/customer-application/types";
+import type { StoredFitScore } from "@/lib/customer-application/scoring-repository";
 import { PageHeader } from "@/components/shell/PageHeader";
 import {
   KpiCard,
@@ -20,12 +25,26 @@ async function load(): Promise<CustomerApplicationListRow[] | null> {
   }
 }
 
+async function loadScores(
+  applicationIds: string[],
+): Promise<Map<string, StoredFitScore> | null> {
+  try {
+    return await getLatestFitScoresForApplications(applicationIds);
+  } catch {
+    return null;
+  }
+}
+
 export default async function CustomerApplicationsPage() {
   const user = await getOptionalUser();
   const isAdmin = user?.role === "asgard_admin";
   const live = isAdmin ? await load() : null;
   const previewMode = !isAdmin || live === null;
   const rows = previewMode ? PREVIEW_CUSTOMER_APPLICATIONS : (live ?? []);
+
+  const scores: Map<string, StoredFitScore> = previewMode
+    ? PREVIEW_CUSTOMER_APPLICATION_SCORES
+    : (await loadScores(rows.map((r) => r.id))) ?? new Map();
 
   const totals = {
     all: rows.length,
@@ -60,7 +79,11 @@ export default async function CustomerApplicationsPage() {
         />
       </KpiGrid>
 
-      <CustomerApplicationsList rows={rows} previewMode={previewMode} />
+      <CustomerApplicationsList
+        rows={rows}
+        previewMode={previewMode}
+        scores={Object.fromEntries(scores)}
+      />
     </>
   );
 }

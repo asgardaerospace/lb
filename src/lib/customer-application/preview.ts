@@ -1,4 +1,5 @@
 import type { CustomerApplicationListRow } from "./types";
+import type { StoredFitScore } from "./scoring-repository";
 
 /**
  * Illustrative rows for the admin list when there's no asgard_admin session
@@ -87,3 +88,100 @@ export const PREVIEW_CUSTOMER_APPLICATIONS: CustomerApplicationListRow[] = [
     created_at: "2026-04-09T17:30:00Z",
   },
 ];
+
+const PREVIEW_MODEL_ID = "model-prev-customer-fit-v2";
+
+function previewScore(
+  appId: string,
+  composite: number,
+  priority: "P0" | "P1" | "P2" | "review",
+  dimensions: Record<string, number>,
+  computedAt: string,
+): StoredFitScore {
+  return {
+    id: `score-prev-${appId}`,
+    application_id: appId,
+    model_id: PREVIEW_MODEL_ID,
+    composite_score: composite,
+    dimensions,
+    derived_priority: priority,
+    computed_at: computedAt,
+    computed_by: null,
+    model_version: 2,
+  };
+}
+
+export const PREVIEW_CUSTOMER_APPLICATION_SCORES: Map<
+  string,
+  StoredFitScore
+> = new Map([
+  [
+    "ca-prev-1",
+    previewScore(
+      "ca-prev-1",
+      87,
+      "P0",
+      {
+        compliance_complexity: 30,
+        manufacturing_fit: 90,
+        program_maturity: 75,
+        production_volume: 95,
+        data_readiness: 100,
+        strategic_fit: 95,
+      },
+      "2026-04-25T16:50:00Z",
+    ),
+  ],
+  [
+    "ca-prev-2",
+    previewScore(
+      "ca-prev-2",
+      72,
+      "P1",
+      {
+        compliance_complexity: 65,
+        manufacturing_fit: 80,
+        program_maturity: 60,
+        production_volume: 80,
+        data_readiness: 75,
+        strategic_fit: 65,
+      },
+      "2026-04-23T09:20:00Z",
+    ),
+  ],
+  [
+    "ca-prev-3",
+    previewScore(
+      "ca-prev-3",
+      63,
+      "P2",
+      {
+        compliance_complexity: 100,
+        manufacturing_fit: 60,
+        program_maturity: 50,
+        production_volume: 45,
+        data_readiness: 75,
+        strategic_fit: 50,
+      },
+      "2026-04-21T14:10:00Z",
+    ),
+  ],
+  [
+    "ca-prev-4",
+    previewScore(
+      "ca-prev-4",
+      54,
+      "review",
+      {
+        compliance_complexity: 65,
+        manufacturing_fit: 50,
+        program_maturity: 50,
+        production_volume: 40,
+        data_readiness: 50,
+        strategic_fit: 70,
+      },
+      "2026-04-14T10:10:00Z",
+    ),
+  ],
+  // ca-prev-5 intentionally has no score so the list shows the "—" state
+]);

@@ -7,6 +7,10 @@ import {
   transitionCustomerApplication,
 } from "@/lib/customer-application/repository";
 import { REVIEW_ACTIONS } from "@/lib/customer-application/types";
+import {
+  computeAndStoreFitScore,
+  getLatestFitScore,
+} from "@/lib/customer-application/scoring-repository";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +46,26 @@ export async function PATCH(
         reviewerOrganizationId: admin.organization_id,
         notes: parsed.data.notes ?? null,
       });
+
+      // Best-effort: when an admin first marks the application under review,
+      // auto-score if no fit score exists yet. Failures here must NOT fail
+      // the transition response — surface them in dev logs only.
+      if (parsed.data.action === "mark_under_review") {
+        try {
+          const existing = await getLatestFitScore(id);
+          if (!existing) {
+            await computeAndStoreFitScore(id, { computedBy: admin.id });
+          }
+        } catch (scoreErr) {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn(
+              "[customer-application] auto-score failed:",
+              scoreErr instanceof Error ? scoreErr.message : scoreErr,
+            );
+          }
+        }
+      }
+
       return NextResponse.json({ application: result }, { status: 200 });
     } catch (err) {
       if (err instanceof TransitionError) {
