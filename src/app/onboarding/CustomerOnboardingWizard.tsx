@@ -22,7 +22,12 @@ import {
   type CustomerData,
   type StepId,
 } from "./types";
-import { clearDraft, loadDraft, saveDraft } from "./draftStorage";
+import {
+  clearDraft,
+  loadDraft,
+  saveDraft,
+  saveSubmission,
+} from "./draftStorage";
 
 const SECTION_STATUS: Record<StepId, number> = {
   company: 100,
@@ -49,6 +54,7 @@ export function CustomerOnboardingWizard({
   const [restored, setRestored] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const initialStepRef = useRef(initialStep);
 
   // Hydrate from localStorage on mount. setState here is intentional —
@@ -116,11 +122,73 @@ export function CustomerOnboardingWizard({
     setSavedAt(null);
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
+    if (submitting) return;
+    setSubmitError(null);
     setSubmitting(true);
-    // Persist the final state before navigating so the confirmation page can read it.
+    // Persist the final draft state before the network call so a refresh
+    // mid-submit does not lose progress.
     saveDraft(data, stepIdx);
-    router.push("/onboarding/confirmation");
+
+    const primaryEmail =
+      data.company.contacts.find((c) => c.role === "primary")?.email ?? null;
+
+    try {
+      const res = await fetch("/api/customer-applications", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          intake_email: primaryEmail,
+          payload_schema_version: 1,
+          payload: data,
+        }),
+      });
+
+      let parsed: {
+        application_id?: string | null;
+        status?: string | null;
+        derived_tier?: string | null;
+        preview_mode?: boolean;
+        error?: string;
+        message?: string;
+        details?: string;
+      } = {};
+      try {
+        parsed = await res.json();
+      } catch {
+        // ignore — body may be empty
+      }
+
+      if (!res.ok) {
+        const message =
+          parsed.message ??
+          parsed.details ??
+          parsed.error ??
+          `Submission failed (${res.status})`;
+        setSubmitError(message);
+        setSubmitting(false);
+        return;
+      }
+
+      // Success (real or preview-mode). Snapshot what we just submitted so
+      // the confirmation page can render it; only THEN clear the draft.
+      saveSubmission({
+        applicationId: parsed.application_id ?? null,
+        status: parsed.status ?? (parsed.preview_mode ? "preview" : "submitted"),
+        derivedTier: parsed.derived_tier ?? null,
+        previewMode: !!parsed.preview_mode,
+        data,
+      });
+      clearDraft();
+      router.push("/onboarding/confirmation");
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error
+          ? err.message
+          : "Network error — please retry. Your draft is still saved.",
+      );
+      setSubmitting(false);
+    }
   }
 
   const stepNode = (() => {
@@ -249,6 +317,21 @@ export function CustomerOnboardingWizard({
 
         <div className="mx-auto w-full max-w-[1080px] px-4 pb-16 pt-6 sm:px-8 lg:px-10 lg:pt-8">
           {stepNode}
+
+          {submitError && stepIdx === STEPS.length - 1 && (
+            <div
+              role="alert"
+              className="mt-6 rounded-md border border-rose-500/30 bg-rose-500/[0.08] px-4 py-3 text-[12.5px] leading-relaxed text-rose-200"
+            >
+              <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-rose-300">
+                Submission failed
+              </span>
+              <span className="ml-2">{submitError}</span>
+              <span className="mt-1 block text-[11.5px] text-rose-200/75">
+                Your draft is still saved locally. Try again or adjust the highlighted fields above.
+              </span>
+            </div>
+          )}
 
           <div className="mt-9 flex flex-col gap-4 border-t border-slate-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
             <Button

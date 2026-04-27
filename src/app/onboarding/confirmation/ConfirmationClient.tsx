@@ -3,39 +3,48 @@
 import { useEffect, useState } from "react";
 import { Logo } from "@/components/shell/Logo";
 import { LinkButton } from "@/components/ui";
-import { DRAFT_KEY, type StoredDraft } from "../draftStorage";
+import {
+  clearSubmission,
+  loadDraft,
+  loadSubmission,
+  type StoredSubmission,
+} from "../draftStorage";
 import { deriveTier, initialCustomer, type CustomerData } from "../types";
 
 export function ConfirmationClient() {
-  const [snapshot, setSnapshot] = useState<CustomerData | null>(null);
+  const [submission, setSubmission] = useState<StoredSubmission | null>(null);
+  const [draftFallback, setDraftFallback] = useState<CustomerData | null>(null);
 
-  // Hydrate snapshot from localStorage on mount.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const raw = window.localStorage.getItem(DRAFT_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as StoredDraft;
-        if (parsed?.data) {
-          // eslint-disable-next-line react-hooks/set-state-in-effect
-          setSnapshot(parsed.data);
-        }
-      }
-    } catch {
-      // ignore
+    const sub = loadSubmission();
+    if (sub) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSubmission(sub);
+      return;
+    }
+    // No submission record — confirmation page was hit directly. Fall back
+    // to the most recent local draft so the page is still meaningful.
+    const draft = loadDraft();
+    if (draft) {
+      setDraftFallback(draft.data);
     }
   }, []);
 
   function startAnother() {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(DRAFT_KEY);
-    }
+    clearSubmission();
     window.location.href = "/onboarding";
   }
 
-  const d = snapshot ?? initialCustomer();
-  const tier = deriveTier(d);
-  const w = d.workspace;
+  const data: CustomerData =
+    submission?.data ?? draftFallback ?? initialCustomer();
+  const tier = (submission?.derivedTier ?? deriveTier(data)).toUpperCase();
+  const w = data.workspace;
+  const isPreviewMode = submission?.previewMode ?? !submission;
+  const applicationId = submission?.applicationId ?? null;
+  const submittedAt = submission?.submittedAt
+    ? new Date(submission.submittedAt)
+    : null;
 
   return (
     <div
@@ -50,53 +59,101 @@ export function ConfirmationClient() {
       </div>
 
       <div className="w-full max-w-[760px]">
-        <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/[0.08] px-2.5 py-1 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
-          <span
-            className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.18)]"
-            aria-hidden
-          />
-          Submitted
-        </div>
+        <StatusBadge previewMode={isPreviewMode} />
         <h1 className="m-0 text-[28px] font-medium tracking-tight text-slate-100 sm:text-[32px]">
-          Your workspace is being provisioned.
+          {isPreviewMode
+            ? "Submission captured (preview mode)."
+            : "Application received."}
         </h1>
         <p className="mt-3 max-w-[640px] text-[14px] leading-relaxed text-slate-400">
-          We&apos;ve captured your configuration. A Launchbelt forward-deployed
-          engineer will reach out within one business day to confirm
-          provisioning details and schedule kickoff.
+          {isPreviewMode
+            ? "Supabase isn't wired in this environment, so nothing was written to the database. Your draft is still in this browser for reference."
+            : "Asgard's forward-deployed engineering team will review your intake and reach out within one business day to confirm provisioning details and schedule kickoff."}
         </p>
 
-        <div className="mt-8 grid gap-3 rounded-lg border border-slate-800 bg-slate-900/50 p-5 sm:grid-cols-2">
-          <Field label="Company">{d.company.legal_name}</Field>
+        {/* Submission details */}
+        <div className="mt-6 rounded-md border border-slate-800 bg-slate-900/50 px-4 py-3 font-mono text-[11.5px] text-slate-400">
+          <span className="uppercase tracking-[0.08em] text-slate-500">
+            Application ID
+          </span>
+          <span className="ml-2 text-slate-200">
+            {applicationId ?? "— (preview mode)"}
+          </span>
+          {submittedAt && (
+            <>
+              <span className="ml-3 uppercase tracking-[0.08em] text-slate-500">
+                Submitted
+              </span>
+              <span className="ml-2 text-slate-200">
+                {submittedAt.toLocaleString()}
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* Configuration snapshot */}
+        <div className="mt-6 grid gap-3 rounded-lg border border-slate-800 bg-slate-900/50 p-5 sm:grid-cols-2">
+          <Field label="Company">{data.company.legal_name}</Field>
           <Field label="Tier">
             <span className="font-mono text-[12px] tracking-wider text-cyan-300">
               {tier}
             </span>
           </Field>
           <Field label="Workspace">
-            {w.workspace_name} ·{" "}
-            <span className="font-mono text-[12px] text-slate-400">
-              {w.subdomain}.launchbelt.com
-            </span>
+            {w.workspace_name || "—"}
+            {w.subdomain ? (
+              <>
+                {" "}
+                ·{" "}
+                <span className="font-mono text-[12px] text-slate-400">
+                  {w.subdomain}.launchbelt.com
+                </span>
+              </>
+            ) : null}
           </Field>
           <Field label="Data residency">
             <span className="font-mono text-[12px] text-slate-400">
-              {w.data_residency.replace("_", "-").toUpperCase()}
+              {w.data_residency
+                ? w.data_residency.replace("_", "-").toUpperCase()
+                : "—"}
             </span>
           </Field>
-          <Field label="SSO">{w.sso_provider}</Field>
+          <Field label="SSO">{w.sso_provider || "—"}</Field>
           <Field label="Initial seats">
-            <span className="font-mono tabular-nums">{w.seats}</span>
+            <span className="font-mono tabular-nums">{w.seats || "—"}</span>
           </Field>
         </div>
 
-        <ol className="mt-8 space-y-3">
+        {/* Next steps */}
+        <h2 className="mt-10 mb-3 text-[15px] font-medium text-slate-100">
+          What happens next
+        </h2>
+        <ol className="space-y-3">
           {[
-            ["1", "Workspace provisioned", `In ${w.data_residency.replace("_", "-").toUpperCase()} — typical SLA ≈ 90 seconds.`],
-            ["2", "SSO registration", `${w.sso_provider} federation handshake for ${w.seats} seats.`],
-            ["3", "RFQ templates seeded", "Compliance flow-down (FAR/DFARS, ITAR, CMMC) pre-applied."],
-            ["4", "Supplier shortlist", "Generated and ranked by your routing weights."],
-            ["5", "FDE kickoff", "Calendar invite sent to your primary contact."],
+            [
+              "1",
+              "Asgard review",
+              "An FDE will read your intake against the customer-fit model — checking compliance flow-down, capability match, and program fit.",
+            ],
+            [
+              "2",
+              "Requirements validation",
+              "We may reach out for clarification on classified work, ITAR scope, or named defense programs before approving.",
+            ],
+            [
+              "3",
+              "Workspace preparation",
+              w.data_residency
+                ? `Workspace is staged in ${w.data_residency
+                    .replace("_", "-")
+                    .toUpperCase()}. SSO federation, RFQ templates, and the supplier shortlist are pre-built but held until approval.`
+                : "Workspace, RFQ templates, and supplier shortlist are pre-built but held until approval.",
+            ],
+            [
+              "4",
+              "Follow-up contact",
+              "Your primary contact gets a kickoff invite once approved. SSO admin will receive the federation request separately.",
+            ],
           ].map(([n, title, body]) => (
             <li
               key={n}
@@ -131,11 +188,36 @@ export function ConfirmationClient() {
           </button>
         </div>
 
-        <p className="mt-10 text-[11.5px] text-slate-600">
-          Preview environment — this submission is not yet wired to the backend.
-          A draft snapshot was kept in your browser for reference.
-        </p>
+        {isPreviewMode && (
+          <p className="mt-10 text-[11.5px] text-slate-600">
+            Preview intake: responses are not saved to a server. Set the
+            Supabase environment variables to enable real persistence.
+          </p>
+        )}
       </div>
+    </div>
+  );
+}
+
+function StatusBadge({ previewMode }: { previewMode: boolean }) {
+  if (previewMode) {
+    return (
+      <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/[0.08] px-2.5 py-1 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-amber-300">
+        <span
+          className="h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_0_4px_rgba(251,191,36,0.18)]"
+          aria-hidden
+        />
+        Preview · not persisted
+      </div>
+    );
+  }
+  return (
+    <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/[0.08] px-2.5 py-1 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+      <span
+        className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.18)]"
+        aria-hidden
+      />
+      Submitted
     </div>
   );
 }
