@@ -123,6 +123,125 @@ export interface SubmittedSupplierApplication {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Admin review types
+// ────────────────────────────────────────────────────────────────────────────
+
+export type SupplierApplicationStatus =
+  | "draft"
+  | "submitted"
+  | "under_review"
+  | "approved"
+  | "rejected"
+  | "revisions_requested"
+  | "withdrawn";
+
+export const SUPPLIER_REVIEW_ACTIONS = [
+  "mark_under_review",
+  "request_info",
+  "approve",
+  "reject",
+] as const;
+export type SupplierReviewAction = (typeof SUPPLIER_REVIEW_ACTIONS)[number];
+
+export const SUPPLIER_REVIEW_ACTION_TO_STATUS: Record<
+  SupplierReviewAction,
+  SupplierApplicationStatus
+> = {
+  mark_under_review: "under_review",
+  request_info: "revisions_requested",
+  approve: "approved",
+  reject: "rejected",
+};
+
+export interface SupplierApplicationListRow {
+  id: string;
+  status: SupplierApplicationStatus;
+  legal_name: string;
+  dba: string | null;
+  hq_state: string | null;
+  hq_country: string;
+  itar_registered: boolean;
+  cmmc_level: CmmcLevel;
+  primary_processes: string[];
+  intake_email: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface SupplierApplicationDetail extends SupplierApplicationListRow {
+  hq_city: string | null;
+  team_size: number | null;
+  year_founded: number | null;
+  duns: string | null;
+  cage: string | null;
+  payload: Record<string, unknown>;
+  payload_schema_version: number;
+  decision_notes: string | null;
+  reviewed_by: string | null;
+  organization_id: string | null;
+  intake_token: string | null;
+}
+
+export interface SupplierApplicationCertificationRow {
+  id: string;
+  cert_type: string;
+  issuer: string | null;
+  issued_date: string | null;
+  expiration_date: string | null;
+  certificate_no: string | null;
+}
+
+export interface SupplierApplicationMachineRow {
+  id: string;
+  machine_type: string;
+  manufacturer: string | null;
+  model: string | null;
+  envelope: string | null;
+  axis_count: number | null;
+  tolerance_capability: string | null;
+  materials_supported: string[];
+  count: number;
+}
+
+export interface SupplierApplicationCapabilityRow {
+  id: string;
+  process_type: string;
+  materials: string[];
+  notes: string | null;
+}
+
+export interface SupplierApplicationPastPerformanceRow {
+  id: string;
+  customer_name: string;
+  program_name: string | null;
+  contract_type: string | null;
+  year_start: number | null;
+  year_end: number | null;
+  contract_value_usd: number | null;
+  references_contact: string | null;
+}
+
+export interface SupplierApplicationReviewRow {
+  id: string;
+  reviewer_id: string;
+  reviewer_email: string | null;
+  action: string;
+  notes: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface SupplierApplicationFull {
+  application: SupplierApplicationDetail;
+  certifications: SupplierApplicationCertificationRow[];
+  machines: SupplierApplicationMachineRow[];
+  capabilities: SupplierApplicationCapabilityRow[];
+  past_performance: SupplierApplicationPastPerformanceRow[];
+  reviews: SupplierApplicationReviewRow[];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
 // ────────────────────────────────────────────────────────────────────────────
 

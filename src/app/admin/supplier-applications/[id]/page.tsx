@@ -1,0 +1,435 @@
+import { notFound } from "next/navigation";
+import { getOptionalUser } from "@/lib/auth";
+import { getSupplierApplicationFull } from "@/lib/supplier-application/repository";
+import type {
+  SupplierApplicationFull,
+  SupplierApplicationStatus,
+} from "@/lib/supplier-application/types";
+import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
+import {
+  Card,
+  RequiresLiveData,
+  StatusBadge,
+  mapStatus,
+  supplierApplicationStatusMap,
+} from "@/components/ui";
+import ReviewActions from "./ReviewActions";
+
+export const dynamic = "force-dynamic";
+
+export default async function SupplierApplicationDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const user = await getOptionalUser();
+  const { id } = await params;
+
+  if (user?.role !== "asgard_admin") {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Admin · Supplier Application"
+          title={id.slice(0, 8)}
+          subtitle="Supplier-application review requires an authenticated asgard_admin session."
+        />
+        <RequiresLiveData
+          reason="Per-application detail relies on live Supabase data and the asgard_admin role."
+          backHref="/admin/supplier-applications"
+          backLabel="Back to Supplier Applications preview"
+        />
+      </>
+    );
+  }
+
+  let full: SupplierApplicationFull | null = null;
+  try {
+    full = await getSupplierApplicationFull(id);
+  } catch {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Admin · Supplier Application"
+          title={id.slice(0, 8)}
+        />
+        <RequiresLiveData
+          reason="Could not reach Supabase to load this application."
+          backHref="/admin/supplier-applications"
+          backLabel="Back to Supplier Applications"
+        />
+      </>
+    );
+  }
+  if (!full) notFound();
+
+  const a = full.application;
+  const { label, tone } = mapStatus(supplierApplicationStatusMap, a.status);
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Admin · Supplier Application"
+        title={a.legal_name}
+        subtitle={`${a.dba ? a.dba + " · " : ""}${a.hq_city ?? ""}${
+          a.hq_city && a.hq_state ? ", " : ""
+        }${a.hq_state ?? ""} · ID ${a.id.slice(0, 8)}`}
+        back={{
+          href: "/admin/supplier-applications",
+          label: "All applications",
+        }}
+        actions={<StatusBadge tone={tone}>{label}</StatusBadge>}
+      />
+
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KvCard label="Submitted">{fmtDate(a.submitted_at)}</KvCard>
+        <KvCard label="Last reviewed">{fmtDate(a.reviewed_at)}</KvCard>
+        <KvCard label="Year founded">
+          <span className="tabular-nums">{a.year_founded ?? "—"}</span>
+        </KvCard>
+        <KvCard label="Team size">
+          <span className="tabular-nums">{a.team_size ?? "—"}</span>
+        </KvCard>
+        <KvCard label="DUNS">
+          <span className="font-mono text-xs">{a.duns ?? "—"}</span>
+        </KvCard>
+        <KvCard label="CAGE">
+          <span className="font-mono text-xs">{a.cage ?? "—"}</span>
+        </KvCard>
+        <KvCard label="ITAR">
+          {a.itar_registered ? (
+            <StatusBadge tone="warn" dot={false}>
+              Registered
+            </StatusBadge>
+          ) : (
+            "—"
+          )}
+        </KvCard>
+        <KvCard label="CMMC">
+          <span className="font-mono text-xs">
+            {a.cmmc_level.replace("_", " ")}
+          </span>
+        </KvCard>
+      </div>
+
+      <SectionHeader
+        title="Compliance & primary processes"
+        subtitle="What this supplier can run, gated by what they're certified for."
+      />
+      <Card>
+        <div className="flex flex-wrap items-center gap-2">
+          <ComplianceFlag on={a.itar_registered} label="ITAR registered" />
+          <StatusBadge tone="info" dot={false}>
+            CMMC: {a.cmmc_level.replace("_", " ")}
+          </StatusBadge>
+        </div>
+        <div className="mt-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Primary processes
+          </div>
+          {a.primary_processes.length === 0 ? (
+            <p className="mt-1 text-xs text-slate-500">
+              No primary processes declared.
+            </p>
+          ) : (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {a.primary_processes.map((p) => (
+                <StatusBadge key={p} tone="info" dot={false}>
+                  {p}
+                </StatusBadge>
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <div>
+          <SectionHeader
+            title={`Capabilities (${full.capabilities.length})`}
+            subtitle="Process × material matrix used for routing match."
+          />
+          <Card>
+            {full.capabilities.length === 0 ? (
+              <p className="text-xs text-slate-500">No capabilities listed.</p>
+            ) : (
+              <ul className="space-y-2">
+                {full.capabilities.map((c) => (
+                  <li
+                    key={c.id}
+                    className="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2.5"
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm font-medium text-slate-100">
+                        {c.process_type}
+                      </span>
+                      {c.materials.length > 0 && (
+                        <span className="font-mono text-[11px] text-cyan-300">
+                          {c.materials.length} material
+                          {c.materials.length === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </div>
+                    {c.materials.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {c.materials.map((m) => (
+                          <StatusBadge key={m} tone="neutral" dot={false}>
+                            {m}
+                          </StatusBadge>
+                        ))}
+                      </div>
+                    )}
+                    {c.notes && (
+                      <p className="mt-1 text-xs text-slate-400">{c.notes}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+
+        <div>
+          <SectionHeader title={`Machines (${full.machines.length})`} />
+          <Card>
+            {full.machines.length === 0 ? (
+              <p className="text-xs text-slate-500">No machines listed.</p>
+            ) : (
+              <ul className="space-y-2">
+                {full.machines.map((m) => (
+                  <li
+                    key={m.id}
+                    className="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2.5"
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm font-medium text-slate-100">
+                        {m.machine_type}
+                      </span>
+                      <span className="font-mono text-[11px] text-slate-500">
+                        ×{m.count}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 font-mono text-[11px] text-slate-500">
+                      {[m.manufacturer, m.model, m.envelope]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[11px] text-slate-500">
+                      {m.axis_count != null ? `${m.axis_count}-axis · ` : ""}
+                      {m.tolerance_capability ?? ""}
+                    </div>
+                    {m.materials_supported.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {m.materials_supported.map((mat) => (
+                          <StatusBadge key={mat} tone="neutral" dot={false}>
+                            {mat}
+                          </StatusBadge>
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+
+        <div>
+          <SectionHeader
+            title={`Certifications (${full.certifications.length})`}
+          />
+          <Card>
+            {full.certifications.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                No certifications declared.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {full.certifications.map((c) => (
+                  <li
+                    key={c.id}
+                    className="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2.5"
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="font-mono text-sm text-slate-100">
+                        {c.cert_type}
+                      </span>
+                      {c.expiration_date && (
+                        <span className="font-mono text-[11px] text-amber-300">
+                          expires{" "}
+                          {new Date(c.expiration_date).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[11px] text-slate-500">
+                      {[c.issuer, c.certificate_no]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+
+        <div>
+          <SectionHeader
+            title={`Past performance (${full.past_performance.length})`}
+          />
+          <Card>
+            {full.past_performance.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                No prior program references listed.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {full.past_performance.map((p) => (
+                  <li
+                    key={p.id}
+                    className="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2.5"
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm font-medium text-slate-100">
+                        {p.customer_name}
+                      </span>
+                      {p.contract_value_usd != null && (
+                        <span className="font-mono text-[11px] tabular-nums text-cyan-300">
+                          $
+                          {Number(p.contract_value_usd).toLocaleString(
+                            undefined,
+                            { maximumFractionDigits: 0 },
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    {p.program_name && (
+                      <div className="mt-0.5 text-xs text-slate-300">
+                        {p.program_name}
+                      </div>
+                    )}
+                    <div className="mt-0.5 font-mono text-[11px] text-slate-500">
+                      {[p.year_start, p.year_end].filter((v) => v != null).join("–") ||
+                        "—"}{" "}
+                      {p.contract_type ? "· " + p.contract_type : ""}
+                    </div>
+                    {p.references_contact && (
+                      <div className="mt-0.5 font-mono text-[11px] text-slate-500">
+                        ref: {p.references_contact}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+      </div>
+
+      <SectionHeader
+        title="Review"
+        subtitle="Status transitions append to the review trail and emit audit_logs."
+      />
+      <Card>
+        <ReviewActions
+          applicationId={a.id}
+          status={a.status as SupplierApplicationStatus}
+        />
+        {a.decision_notes && (
+          <div className="mt-4 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-300">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+              Latest decision notes
+            </div>
+            <p className="mt-1 whitespace-pre-wrap">{a.decision_notes}</p>
+          </div>
+        )}
+      </Card>
+
+      {full.reviews.length > 0 && (
+        <>
+          <SectionHeader title={`Review trail (${full.reviews.length})`} />
+          <Card>
+            <ul className="space-y-2.5">
+              {full.reviews.map((r) => (
+                <li
+                  key={r.id}
+                  className="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2.5"
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="font-mono text-[11px] uppercase tracking-wider text-cyan-300">
+                      {r.action}
+                    </span>
+                    <span className="font-mono text-[11px] text-slate-500">
+                      {fmtDateTime(r.created_at)}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-400">
+                    by{" "}
+                    <span className="font-mono text-slate-300">
+                      {r.reviewer_email ?? r.reviewer_id.slice(0, 8)}
+                    </span>
+                  </div>
+                  {r.notes && (
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-slate-200">
+                      {r.notes}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </>
+      )}
+
+      <SectionHeader
+        title="Raw payload (JSONB snapshot)"
+        subtitle={`payload_schema_version = ${a.payload_schema_version}`}
+      />
+      <Card>
+        <details>
+          <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-200">
+            Show full JSON
+          </summary>
+          <pre className="mt-2 max-h-[420px] overflow-auto rounded bg-slate-950/70 p-3 font-mono text-[11px] leading-relaxed text-slate-300">
+            {JSON.stringify(a.payload, null, 2)}
+          </pre>
+        </details>
+      </Card>
+    </>
+  );
+}
+
+function KvCard({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 text-sm text-slate-100">{children}</div>
+    </Card>
+  );
+}
+
+function ComplianceFlag({ on, label }: { on: boolean; label: string }) {
+  return (
+    <StatusBadge tone={on ? "warn" : "neutral"} dot={false}>
+      {on ? "✓ " : "○ "}
+      {label}
+    </StatusBadge>
+  );
+}
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString();
+}
+
+function fmtDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString();
+}

@@ -63,6 +63,13 @@ const SCREENS: Record<Exclude<Role, "all">, Screen[]> = {
       status: "wired",
     },
     {
+      title: "Supplier Applications",
+      href: "/admin/supplier-applications",
+      description:
+        "Submitted supplier intake forms — filter by status / process / ITAR, drill in to review certifications, machines, and capabilities.",
+      status: "wired",
+    },
+    {
       title: "Quote Pipeline",
       href: "/admin/quotes",
       description: "Pending, submitted, and under-review quotes.",

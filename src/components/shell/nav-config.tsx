@@ -46,6 +46,11 @@ export const adminNav: NavItem[] = [
     icon: ICONS.eye,
   },
   { label: "Suppliers", href: "/admin/suppliers", icon: ICONS.users },
+  {
+    label: "Supplier Applications",
+    href: "/admin/supplier-applications",
+    icon: ICONS.clipboard,
+  },
   { label: "Quote Pipeline", href: "/admin/quotes", icon: ICONS.dollar },
   { label: "Routing Queue", href: "/admin/routing", icon: ICONS.route },
   { label: "RFQ Inbox", href: "/admin/rfqs", icon: ICONS.clipboard },
