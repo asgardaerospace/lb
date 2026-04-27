@@ -18,17 +18,50 @@ const MISSION_TYPES = [
 
 const LIFECYCLE_STAGES = ["Prototype", "DVT", "EVT", "LRIP", "Production"];
 
-export default function ProgramCreateForm() {
+export interface ProgramCreateDefaults {
+  program_name: string;
+  program_type: string;
+  lifecycle: string;
+  itar: boolean;
+  cui: boolean;
+  cmmc_level: string;
+  primary_processes: string[];
+  legal_name: string;
+}
+
+export default function ProgramCreateForm({
+  defaults,
+}: {
+  defaults?: ProgramCreateDefaults | null;
+}) {
   const router = useRouter();
-  const [program_name, setName] = useState("");
-  const [program_type, setType] = useState("");
-  const [lifecycle, setLifecycle] = useState("");
-  const [description, setDescription] = useState("");
-  const [compliance_level, setCompliance] = useState("");
-  const [itar, setItar] = useState(false);
-  const [cui, setCui] = useState(false);
+  const [program_name, setName] = useState(defaults?.program_name ?? "");
+  const [program_type, setType] = useState(
+    defaults && MISSION_TYPES.includes(defaults.program_type)
+      ? defaults.program_type
+      : "",
+  );
+  const [lifecycle, setLifecycle] = useState(
+    defaults && LIFECYCLE_STAGES.includes(defaults.lifecycle)
+      ? defaults.lifecycle
+      : "",
+  );
+  const [description, setDescription] = useState(
+    defaults?.primary_processes && defaults.primary_processes.length > 0
+      ? `Primary processes (from intake): ${defaults.primary_processes.join(", ")}.`
+      : "",
+  );
+  const [compliance_level, setCompliance] = useState(
+    defaults && defaults.cmmc_level && defaults.cmmc_level !== "none"
+      ? `CMMC ${defaults.cmmc_level.replace("_", " ")}`
+      : "",
+  );
+  const [itar, setItar] = useState(defaults?.itar ?? false);
+  const [cui, setCui] = useState(defaults?.cui ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const prefilled = !!defaults;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,7 +83,9 @@ export default function ProgramCreateForm() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Create failed");
-      router.push(`/buyer/programs/${data.program.id}`);
+      // Phase 6 success flow: pass ?just_created=1 so the program detail
+      // page surfaces the "submit your first RFQ" hint.
+      router.push(`/buyer/programs/${data.program.id}?just_created=1`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Create failed");
       setBusy(false);
@@ -59,6 +94,20 @@ export default function ProgramCreateForm() {
 
   return (
     <form onSubmit={submit} className="space-y-6">
+      {prefilled && (
+        <div className="rounded-md border border-cyan-500/25 bg-cyan-500/[0.04] px-3.5 py-2.5 text-xs text-cyan-100">
+          <span className="mr-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300">
+            Pre-filled from intake
+          </span>
+          Mission type, lifecycle stage, and ITAR/CUI flags are populated
+          from{" "}
+          <span className="font-mono text-cyan-200">
+            {defaults?.legal_name}
+          </span>
+          &apos;s onboarding answers. Adjust anything below before submitting.
+        </div>
+      )}
+
       <Field
         label="Program name"
         required

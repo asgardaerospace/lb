@@ -17,6 +17,8 @@ import { PREVIEW_BUYER_RFQS } from "@/lib/ui/mock";
 
 export const dynamic = "force-dynamic";
 
+const SHOW_PREVIEW_FALLBACK = process.env.NODE_ENV !== "production";
+
 interface RfqRow {
   id: string;
   rfq_title: string;
@@ -40,13 +42,16 @@ export default async function BuyerRfqsListPage() {
   const user = await getOptionalUser();
   const isBuyer = user?.role === "buyer_admin" || user?.role === "buyer_user";
   const live = isBuyer && user ? await loadRfqs(user.organization_id) : null;
-  const previewMode = !isBuyer || live === null;
+  // Preview mock is shown only when there is no live data AND we are not
+  // in production. Real authenticated buyers with empty data see the
+  // proper empty state instead.
+  const previewMode = (!isBuyer || live === null) && SHOW_PREVIEW_FALLBACK;
   const rfqs: RfqRow[] = previewMode
     ? (PREVIEW_BUYER_RFQS as unknown as RfqRow[]).map((r) => ({
         ...r,
         submitted_at: "2026-04-12T09:15:00Z",
       }))
-    : live!;
+    : (live ?? []);
 
   const draft = rfqs.filter((r) => r.status === "draft").length;
   const inFlight = rfqs.filter((r) =>

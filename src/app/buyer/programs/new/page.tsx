@@ -1,4 +1,5 @@
 import { getOptionalUser } from "@/lib/auth";
+import { getIntakeDefaultsForOrganization } from "@/lib/customer-application/intake-defaults";
 import ProgramCreateForm from "./ProgramCreateForm";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Card, PreviewDataBanner } from "@/components/ui";
@@ -8,6 +9,13 @@ export const dynamic = "force-dynamic";
 export default async function NewProgramPage() {
   const user = await getOptionalUser();
   const isBuyer = user?.role === "buyer_admin" || user?.role === "buyer_user";
+
+  // Pre-fill defaults from the customer's onboarding intake when available.
+  // Best-effort — null result just means no pre-fill happens.
+  const defaults =
+    isBuyer && user
+      ? await getIntakeDefaultsForOrganization(user.organization_id)
+      : null;
 
   return (
     <>
@@ -22,7 +30,22 @@ export default async function NewProgramPage() {
       )}
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         <Card>
-          <ProgramCreateForm />
+          <ProgramCreateForm
+            defaults={
+              defaults
+                ? {
+                    program_name: defaults.suggested_program_name ?? "",
+                    program_type: defaults.suggested_program_type ?? "",
+                    lifecycle: defaults.suggested_lifecycle_stage ?? "",
+                    itar: defaults.itar,
+                    cui: defaults.cui,
+                    cmmc_level: defaults.cmmc_level,
+                    primary_processes: defaults.primary_processes,
+                    legal_name: defaults.legal_name,
+                  }
+                : null
+            }
+          />
         </Card>
         <aside className="space-y-3">
           <Card>

@@ -22,11 +22,15 @@ export const dynamic = "force-dynamic";
 
 export default async function ProgramDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ just_created?: string }>;
 }) {
   const user = await getOptionalUser();
   const { id } = await params;
+  const sp = await searchParams;
+  const justCreated = sp.just_created === "1";
   const isBuyer = user?.role === "buyer_admin" || user?.role === "buyer_user";
 
   if (!isBuyer || !user) {
@@ -136,6 +140,27 @@ export default async function ProgramDetailPage({
           </div>
         }
       />
+
+      {justCreated && (
+        <div className="mb-5 rounded-md border border-emerald-500/30 bg-emerald-500/[0.06] px-4 py-3 text-sm">
+          <div className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+            Program created
+          </div>
+          <p className="mt-1 text-emerald-100">
+            Next: scroll to <strong className="font-medium">Submit new RFQ</strong>{" "}
+            below to add your first part. Once submitted, Asgard&apos;s routing
+            console matches the RFQ to qualified suppliers and you&apos;ll see
+            it move into{" "}
+            <Link
+              href="/buyer/rfqs"
+              className="underline transition hover:text-emerald-50"
+            >
+              your RFQ list
+            </Link>{" "}
+            for live tracking.
+          </p>
+        </div>
+      )}
 
       <div className="mb-5 grid gap-3 md:grid-cols-3">
         <Card>

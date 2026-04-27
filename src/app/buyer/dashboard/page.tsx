@@ -6,6 +6,7 @@ import {
 } from "@/lib/rfq/repository";
 import { listJobsForBuyer } from "@/lib/jobs/repository";
 import { loadBuyerKpis } from "@/lib/kpis";
+import { getIntakeDefaultsForOrganization } from "@/lib/customer-application/intake-defaults";
 import { PageHeader, SectionHeader } from "@/components/shell/PageHeader";
 import {
   Card,
@@ -22,6 +23,8 @@ import {
 } from "@/components/ui";
 import { formatDate } from "@/lib/ui/format";
 import { PREVIEW_BUYER_PROGRAMS, PREVIEW_BUYER_RFQS } from "@/lib/ui/mock";
+
+const SHOW_PREVIEW_FALLBACK = process.env.NODE_ENV !== "production";
 
 export const dynamic = "force-dynamic";
 
@@ -103,24 +106,34 @@ export default async function BuyerDashboardPage() {
   let kpis: Awaited<ReturnType<typeof loadBuyerKpis>> = null;
   let liveLoadFailed = false;
 
+  let intakeDefaults: Awaited<
+    ReturnType<typeof getIntakeDefaultsForOrganization>
+  > = null;
+
   if (isBuyer && user) {
     try {
-      const [p, r, j, k] = await Promise.all([
+      const [p, r, j, k, defaults] = await Promise.all([
         listProgramsForOrg(user.organization_id),
         listRfqsForOrg(user.organization_id),
         listJobsForBuyer(user.organization_id),
         loadBuyerKpis(user.organization_id),
+        getIntakeDefaultsForOrganization(user.organization_id),
       ]);
       programs = p as Program[];
       rfqs = r as Rfq[];
       jobs = j;
       kpis = k;
+      intakeDefaults = defaults;
     } catch {
       liveLoadFailed = true;
     }
   }
 
-  const previewMode = !isBuyer || liveLoadFailed;
+  // Preview mock is shown ONLY when there's no live data AND we're not in
+  // production. Real authenticated buyers with empty data see the empty
+  // state + onboarding flow below — never preview rows.
+  const previewMode =
+    (!isBuyer || liveLoadFailed) && SHOW_PREVIEW_FALLBACK;
   const displayPrograms: Program[] = previewMode
     ? (PREVIEW_BUYER_PROGRAMS as unknown as Program[])
     : programs;
@@ -132,6 +145,13 @@ export default async function BuyerDashboardPage() {
     (r) =>
       r.status === "routing_in_progress" || r.status === "quotes_requested",
   ).length;
+
+  const firstTimeMode =
+    isBuyer &&
+    !liveLoadFailed &&
+    programs.length === 0 &&
+    rfqs.length === 0 &&
+    jobs.length === 0;
 
   return (
     <>
@@ -155,6 +175,14 @@ export default async function BuyerDashboardPage() {
                 ? "Could not reach Supabase to load buyer data. Showing illustrative preview content."
                 : "Signed in account does not belong to a buyer organization. Showing illustrative preview content."
           }
+        />
+      )}
+
+      {firstTimeMode && (
+        <FirstTimeOnboarding
+          legalName={intakeDefaults?.legal_name ?? null}
+          intakeProgramCount={intakeDefaults?.intake_program_count ?? 0}
+          primaryProcesses={intakeDefaults?.primary_processes ?? []}
         />
       )}
 
@@ -288,5 +316,121 @@ export default async function BuyerDashboardPage() {
         previewBanner={previewMode}
       />
     </>
+  );
+}
+
+function FirstTimeOnboarding({
+  legalName,
+  intakeProgramCount,
+  primaryProcesses,
+}: {
+  legalName: string | null;
+  intakeProgramCount: number;
+  primaryProcesses: string[];
+}) {
+  const greeting = legalName ? `Welcome, ${legalName}` : "Welcome to Launchbelt";
+  const intakeContext = legalName
+    ? intakeProgramCount > 0
+      ? `Your intake declared ${intakeProgramCount} active program type${
+          intakeProgramCount === 1 ? "" : "s"
+        }${
+          primaryProcesses.length > 0
+            ? ` and ${primaryProcesses.length} primary processes`
+            : ""
+        }. We've pre-filled the first program form to match.`
+      : "Pick up where your intake left off — create your first program to start routing work."
+    : "Three steps to get your first part out for quote.";
+
+  return (
+    <section className="mb-6 rounded-xl border border-cyan-500/30 bg-cyan-500/[0.04] p-5">
+      <div className="mb-3">
+        <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-cyan-300">
+          First steps
+        </div>
+        <h2 className="mt-1 text-lg font-semibold text-slate-100">{greeting}</h2>
+        <p className="mt-1 max-w-2xl text-xs text-slate-400">{intakeContext}</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <OnboardingStep
+          step="1"
+          title="Create your first program"
+          body="Spin up the parent record that holds your RFQs and parts. We've pre-filled mission type, lifecycle stage, and compliance flags from your intake."
+          href="/buyer/programs/new"
+          cta="+ New Program"
+          primary
+        />
+        <OnboardingStep
+          step="2"
+          title="Submit your first RFQ"
+          body="Inside the program, attach a part with quantity, material, and delivery date. Asgard routes it to qualified suppliers."
+          href="/buyer/programs"
+          cta="Open programs →"
+        />
+        <OnboardingStep
+          step="3"
+          title="Watch routing happen"
+          body="Once an RFQ is submitted, follow it through routing to supplier quotes. You'll see candidates ranked by capability, compliance, and capacity."
+          href="/buyer/rfqs"
+          cta="Open RFQs →"
+        />
+      </div>
+      {primaryProcesses.length > 0 && (
+        <div className="mt-4 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2">
+          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">
+            Suggested processes (from intake)
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {primaryProcesses.map((p) => (
+              <StatusBadge key={p} tone="info" dot={false}>
+                {p}
+              </StatusBadge>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function OnboardingStep({
+  step,
+  title,
+  body,
+  href,
+  cta,
+  primary,
+}: {
+  step: string;
+  title: string;
+  body: string;
+  href: string;
+  cta: string;
+  primary?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-lg border p-4 ${
+        primary
+          ? "border-cyan-500/30 bg-cyan-500/[0.05]"
+          : "border-slate-800 bg-slate-950/40"
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <span className="grid h-6 w-6 place-content-center rounded-md border border-slate-800 bg-slate-900 font-mono text-[11px] font-semibold text-cyan-300">
+          {step}
+        </span>
+        <div className="text-sm font-medium text-slate-100">{title}</div>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-slate-400">{body}</p>
+      <div className="mt-3">
+        <LinkButton
+          href={href}
+          variant={primary ? "primary" : "secondary"}
+          size="sm"
+        >
+          {cta}
+        </LinkButton>
+      </div>
+    </div>
   );
 }
