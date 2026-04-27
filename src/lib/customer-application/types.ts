@@ -163,7 +163,8 @@ export type CustomerApplicationStatus =
   | "approved"
   | "rejected"
   | "revisions_requested"
-  | "withdrawn";
+  | "withdrawn"
+  | "converted";
 
 export const REVIEW_ACTIONS = [
   "mark_under_review",
@@ -270,6 +271,70 @@ export interface CustomerApplicationFull {
   contacts: CustomerApplicationContact[];
   defense_programs: CustomerApplicationDefenseProgram[];
   reviews: CustomerApplicationReview[];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Materialized profile (Phase 4 conversion output)
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface MaterializedOrganization {
+  id: string;
+  name: string;
+  type: string;
+  itar_registered: boolean;
+  created_at: string;
+}
+
+export interface MaterializedCustomerProfile {
+  id: string;
+  organization_id: string;
+  source_application_id: string | null;
+  tier: CustomerTier | null;
+  workspace_name: string;
+  workspace_subdomain: string;
+  data_residency: string;
+  sso_provider: string;
+  audit_log_retention_yrs: number;
+  workspace_status: string;
+  provisioned_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MaterializedRoutingWeights {
+  id: string;
+  customer_profile_id: string;
+  cost_weight: number;
+  speed_weight: number;
+  risk_penalty_weight: number;
+  geography_weight: number;
+  preferred_regions: string[];
+  preferred_supplier_traits: string[];
+  updated_at: string;
+}
+
+export interface MaterializedSupplierFilters {
+  id: string;
+  customer_profile_id: string;
+  filter_expression: Record<string, unknown>;
+  updated_at: string;
+}
+
+export interface MaterializedCustomerBundle {
+  organization: MaterializedOrganization;
+  profile: MaterializedCustomerProfile;
+  routing_weights: MaterializedRoutingWeights | null;
+  supplier_filters: MaterializedSupplierFilters | null;
+}
+
+export interface ConversionResult {
+  profile_id: string;
+  organization_id: string;
+  application_id: string;
+  status: CustomerApplicationStatus;
+  organization_created: boolean;
+  profile_created: boolean;
+  workspace_subdomain: string;
 }
 
 export function deriveCustomerTier(

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getOptionalUser } from "@/lib/auth";
 import { getCustomerApplicationFull } from "@/lib/customer-application/repository";
 import { getLatestFitScore } from "@/lib/customer-application/scoring-repository";
+import { getMaterializedBundleForApplication } from "@/lib/customer-application/conversion-repository";
 import {
   priorityLabel,
   priorityTone,
@@ -80,7 +81,10 @@ export default async function CustomerApplicationDetailPage({
   // come from a prior compute and may be stale if the application was
   // edited after scoring.
   const live = scoreCustomerApplication(full);
-  const stored = await getLatestFitScore(a.id).catch(() => null);
+  const [stored, bundle] = await Promise.all([
+    getLatestFitScore(a.id).catch(() => null),
+    getMaterializedBundleForApplication(a.id).catch(() => null),
+  ]);
   const display = stored
     ? {
         composite: stored.composite_score,
@@ -160,6 +164,144 @@ export default async function CustomerApplicationDetailPage({
           <span className="tabular-nums">{a.suppliers_per_part}</span>
         </KvCard>
       </div>
+
+      {/* Materialized profile (post-conversion) */}
+      {bundle && (
+        <>
+          <SectionHeader
+            title="Materialized customer profile"
+            subtitle={`Provisioned ${new Date(bundle.profile.created_at).toLocaleString()} · workspace_status = ${bundle.profile.workspace_status}`}
+          />
+          <Card>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {/* Organization */}
+              <div className="rounded-md border border-emerald-500/25 bg-emerald-500/[0.04] p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300">
+                  Organization
+                </div>
+                <div className="mt-1 text-[14px] font-medium text-slate-100">
+                  {bundle.organization.name}
+                </div>
+                <div className="mt-1 font-mono text-[11px] text-slate-500">
+                  {bundle.organization.id.slice(0, 8)} ·{" "}
+                  {bundle.organization.type}
+                  {bundle.organization.itar_registered ? " · ITAR" : ""}
+                </div>
+                <div className="mt-2 font-mono text-[10.5px] text-slate-500">
+                  Created{" "}
+                  {new Date(bundle.organization.created_at).toLocaleDateString()}
+                </div>
+              </div>
+
+              {/* Customer profile */}
+              <div className="rounded-md border border-cyan-500/25 bg-cyan-500/[0.04] p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">
+                  Customer profile
+                </div>
+                <div className="mt-1 text-[14px] font-medium text-slate-100">
+                  {bundle.profile.workspace_name}
+                </div>
+                <div className="mt-1 font-mono text-[11px] text-slate-300">
+                  {bundle.profile.workspace_subdomain}.launchbelt.com
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[10.5px] text-slate-500">
+                  <span>tier</span>
+                  <span className="text-slate-300">
+                    {bundle.profile.tier ?? "—"}
+                  </span>
+                  <span>residency</span>
+                  <span className="text-slate-300">
+                    {bundle.profile.data_residency.toUpperCase()}
+                  </span>
+                  <span>SSO</span>
+                  <span className="text-slate-300">
+                    {bundle.profile.sso_provider}
+                  </span>
+                  <span>retention</span>
+                  <span className="text-slate-300">
+                    {bundle.profile.audit_log_retention_yrs}y
+                  </span>
+                </div>
+              </div>
+
+              {/* Routing weights summary */}
+              <div className="rounded-md border border-slate-800 bg-slate-950/40 p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Routing preferences
+                </div>
+                {bundle.routing_weights ? (
+                  <>
+                    <div className="mt-1 font-mono text-[11.5px] text-slate-300">
+                      cost {bundle.routing_weights.cost_weight} · speed{" "}
+                      {bundle.routing_weights.speed_weight} · risk-penalty{" "}
+                      {bundle.routing_weights.risk_penalty_weight}
+                    </div>
+                    <div className="mt-1 font-mono text-[11px] text-slate-500">
+                      geography weight{" "}
+                      {bundle.routing_weights.geography_weight}
+                    </div>
+                    {bundle.routing_weights.preferred_regions.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {bundle.routing_weights.preferred_regions.map((r) => (
+                          <StatusBadge key={r} tone="info" dot={false}>
+                            {r}
+                          </StatusBadge>
+                        ))}
+                      </div>
+                    )}
+                    {bundle.routing_weights.preferred_supplier_traits.length >
+                      0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {bundle.routing_weights.preferred_supplier_traits.map(
+                          (t) => (
+                            <StatusBadge key={t} tone="neutral" dot={false}>
+                              {t}
+                            </StatusBadge>
+                          ),
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="mt-1 text-xs text-slate-500">
+                    No routing weights row found.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {bundle.supplier_filters && (
+              <div className="mt-4 rounded-md border border-slate-800 bg-slate-950/40 p-4">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Hard-gate supplier filter
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(
+                    bundle.supplier_filters.filter_expression,
+                  ).map(([k, v]) => {
+                    if (v === false || v === null || v === undefined) {
+                      return null;
+                    }
+                    const label = `${k}: ${typeof v === "boolean" ? "✓" : String(v)}`;
+                    const tone = typeof v === "boolean" ? "warn" : "info";
+                    return (
+                      <StatusBadge key={k} tone={tone} dot={false}>
+                        {label}
+                      </StatusBadge>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <p className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-slate-500">
+              Workspace provisioning is the next operational step (Phase 5).
+            </p>
+          </Card>
+
+          <div className="h-5" />
+        </>
+      )}
 
       {/* Customer fit score */}
       <SectionHeader

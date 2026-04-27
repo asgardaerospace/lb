@@ -14,7 +14,8 @@ before continuing.
 | Branch | `main` |
 | Migrations introduced since last deploy | `0006`, `0007`, `0008`, `0009` |
 | Intake migrations (Phase 1, schema-only) | `0010`, `0011`, `0012`, `0013`, `0014` |
-| Intake migrations deferred (Phase 4) | `0015_intake_conversion.sql` — held under `supabase/proposed/` until conversion + backfill phase |
+| Customer-application conversion (Phase 4) | `0015_customer_application_conversion.sql` — adds `converted` status, customer-side FK linkage, and `convert_customer_application(uuid, uuid)` SECURITY DEFINER function |
+| Supplier-application conversion deferred | `supabase/proposed/0015_supplier_application_conversion.sql` — held back until the supplier intake flow is built |
 | Storage bucket required | `launchbelt-documents` (private) |
 
 To verify your local checkout is at the right tip:
@@ -133,15 +134,24 @@ Or if you prefer to apply files individually (Dashboard → SQL Editor):
    *using* a freshly added enum value within the same transaction in which
    it was created).
 
-> **Phase 4 conversion deferred.** `supabase/proposed/0015_intake_conversion.sql`
-> defines `convert_supplier_application(uuid)` and
-> `convert_customer_application(uuid)` plus the linkage FK columns
-> (`supplier_applications.converted_profile_id` → `supplier_profiles`,
-> `supplier_profiles.source_application_id` → `supplier_applications`, and
-> the customer-side equivalents). It is **not** moved into
-> `supabase/migrations/` in this release. Promote only when the FDE review
-> console is ready to call the conversion functions and a backfill plan for
-> existing `supplier_profiles` rows has been agreed.
+10. `supabase/migrations/0015_customer_application_conversion.sql`
+    Phase 4 (customer-side only). Adds the `converted` value to the
+    `customer_application_status` enum, the FK linkage columns
+    `customer_applications.converted_profile_id` ⇄
+    `customer_profiles.source_application_id`, and the SECURITY DEFINER
+    function `convert_customer_application(application_id uuid,
+    admin_user_id uuid) returns jsonb`. The function provisions a buyer
+    organization if the application was anonymous, UPSERTs
+    `customer_profiles` + `customer_routing_weights` +
+    `customer_supplier_filters`, flips status to `converted`, and writes
+    an `audit_logs` row with `action='customer_application.converted'`.
+    Refuses to re-run once status is `converted`.
+
+> **Supplier-side conversion still deferred.**
+> `supabase/proposed/0015_supplier_application_conversion.sql` mirrors the
+> customer flow for `supplier_applications` and adds
+> `supplier_profiles.source_application_id`. Promote only after the
+> supplier intake wizard, API, and admin review console are built.
 
 After all nine are applied, verify in the SQL editor:
 
@@ -188,6 +198,14 @@ select unnest(enum_range(null::document_entity_type))::text;
 
 -- v1 scoring models seeded
 select kind, version, active from scoring_models order by kind, version;
+
+-- conversion function present + new enum value
+select proname from pg_proc
+  where proname = 'convert_customer_application';
+
+select unnest(enum_range(null::customer_application_status))::text;
+-- expect: draft, submitted, under_review, approved, rejected,
+--         revisions_requested, withdrawn, converted
 ```
 
 All queries should return non-empty results. The scoring models query
@@ -277,7 +295,8 @@ is the runtime behavior for each missing piece:
 | Migration `0009` not applied | RFQ ITAR/CUI overrides | `RfqEditor` Compliance section renders with both selects defaulting to "Inherit from program". Saving will fail with a 500 from the PATCH endpoint when the columns don't exist; the toast shows the error message. The routing engine continues to read the program-level flags. |
 | Migrations `0010`–`0014` not applied | Intake persistence | **No user-visible impact in this release.** Phase 1 is schema-only — no submit RPC, no admin list view, no UI wiring. The customer onboarding wizard at `/onboarding` continues to use `localStorage` exclusively; the supplier application wizard remains design-only. The new tables stay empty. |
 | Migration `0014` partially applied (enum extended but FK fails) | Intake document attachment | Will not happen in normal flow — the FK is enum-free and runs in the same transaction as the enum addition. If it does fail in isolation, document upload via `/api/documents/upload` continues to function for existing entity types (`rfq`/`part`/`quote`/`job`); attaching to applications would 500 because the FK constraint is missing. |
-| `0015_intake_conversion.sql` intentionally not applied | Profile materialization on approval | Expected. The `convert_*` functions don't exist; the FK columns linking `*_applications` ↔ `*_profiles` don't exist. Phase 4 ships these together with the FDE review console. |
+| Migration `0015` not applied | Customer conversion | Admin "Convert to customer profile" button POSTs to the convert API which fails because `convert_customer_application` does not exist. Approved applications stay in `approved` state and no `customer_profiles` rows are written. The rest of the admin review flow keeps working. |
+| `supabase/proposed/0015_supplier_application_conversion.sql` intentionally not applied | Supplier conversion | Expected. There is no admin UI for supplier conversion yet; the function is deferred until supplier intake ships. |
 
 In all cases the rest of the application continues to function. Apply the
 missed migration and the corresponding feature lights up without redeploying
