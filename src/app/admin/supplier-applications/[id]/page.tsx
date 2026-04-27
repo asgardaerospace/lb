@@ -1,6 +1,14 @@
 import { notFound } from "next/navigation";
 import { getOptionalUser } from "@/lib/auth";
 import { getSupplierApplicationFull } from "@/lib/supplier-application/repository";
+import { getLatestSupplierFitScore } from "@/lib/supplier-application/scoring-repository";
+import {
+  recommendationLabel,
+  recommendationTone,
+  scoreSupplierApplication,
+  type DerivedRecommendation,
+  type DimensionKey,
+} from "@/lib/supplier-application/scoring";
 import type {
   SupplierApplicationFull,
   SupplierApplicationStatus,
@@ -65,6 +73,37 @@ export default async function SupplierApplicationDetailPage({
   const a = full.application;
   const { label, tone } = mapStatus(supplierApplicationStatusMap, a.status);
 
+  // Always compute live score so risk flags / strengths / tags stay current.
+  const live = scoreSupplierApplication(full);
+  const stored = await getLatestSupplierFitScore(a.id).catch(() => null);
+  const display = stored
+    ? {
+        composite: stored.composite_score,
+        recommendation:
+          (stored.recommendation ?? "defer") as DerivedRecommendation,
+        dimensions: live.dimensions.map((d) => ({
+          ...d,
+          score:
+            (stored.dimensions[d.key as DimensionKey] as number | undefined) ??
+            d.score,
+        })),
+        riskFlags: live.riskFlags,
+        strengths: live.strengths,
+        tags: live.tags,
+        computedAt: stored.computed_at,
+        scored: true as const,
+      }
+    : {
+        composite: live.composite,
+        recommendation: live.recommendation,
+        dimensions: live.dimensions,
+        riskFlags: live.riskFlags,
+        strengths: live.strengths,
+        tags: live.tags,
+        computedAt: null as string | null,
+        scored: false as const,
+      };
+
   return (
     <>
       <PageHeader
@@ -110,6 +149,119 @@ export default async function SupplierApplicationDetailPage({
           </span>
         </KvCard>
       </div>
+
+      {/* Supplier readiness score */}
+      <SectionHeader
+        title="Supplier readiness score"
+        subtitle={
+          display.scored
+            ? `Stored ${new Date(display.computedAt!).toLocaleString()} · refresh from the review actions panel below.`
+            : "Not yet scored. Below is the live preview that will be persisted on first review."
+        }
+      />
+      <Card>
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+          <div className="flex shrink-0 flex-col items-center gap-1 rounded-lg border border-slate-800 bg-slate-950/40 px-5 py-4">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">
+              Composite
+            </span>
+            <span className="text-3xl font-semibold tabular-nums text-slate-100">
+              {display.composite}
+            </span>
+            <StatusBadge
+              tone={recommendationTone(display.recommendation)}
+              dot={false}
+            >
+              {recommendationLabel(display.recommendation)}
+            </StatusBadge>
+            {!display.scored && (
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-amber-300">
+                Live preview
+              </span>
+            )}
+          </div>
+          <div className="flex-1 space-y-2">
+            {display.dimensions.map((d) => (
+              <div key={d.key}>
+                <div className="flex items-baseline justify-between gap-3 font-mono text-[11px] uppercase tracking-[0.06em]">
+                  <span className="text-slate-300">{d.label}</span>
+                  <span className="text-slate-500">
+                    weight {d.weight}% ·{" "}
+                    <span className="tabular-nums text-slate-200">
+                      {d.score}/100
+                    </span>
+                  </span>
+                </div>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-sm bg-slate-800">
+                  <div
+                    className="h-full bg-cyan-400"
+                    style={{ width: `${d.score}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-[11.5px] leading-snug text-slate-500">
+                  {d.detail}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {display.tags.length > 0 && (
+          <div className="mt-5">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+              Recommendation tags
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {display.tags.map((t) => (
+                <StatusBadge key={t} tone="accent" dot={false}>
+                  {t}
+                </StatusBadge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+              Risk flags ({display.riskFlags.length})
+            </div>
+            {display.riskFlags.length === 0 ? (
+              <p className="mt-1 text-xs text-slate-400">
+                No risks raised by the scorer.
+              </p>
+            ) : (
+              <ul className="mt-1.5 space-y-1.5">
+                {display.riskFlags.map((f, i) => (
+                  <li
+                    key={i}
+                    className="rounded-md border border-amber-500/25 bg-amber-500/[0.04] px-3 py-1.5 text-[12px] leading-snug text-amber-200"
+                  >
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+              Strengths
+            </div>
+            <ul className="mt-1.5 space-y-1.5">
+              {display.strengths.map((s, i) => (
+                <li
+                  key={i}
+                  className="rounded-md border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-1.5 text-[12px] leading-snug text-emerald-100"
+                >
+                  {s}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </Card>
+
+      <div className="h-5" />
 
       <SectionHeader
         title="Compliance & primary processes"

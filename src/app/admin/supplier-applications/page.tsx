@@ -1,7 +1,12 @@
 import { getOptionalUser } from "@/lib/auth";
 import { listSupplierApplications } from "@/lib/supplier-application/repository";
-import { PREVIEW_SUPPLIER_APPLICATIONS } from "@/lib/supplier-application/preview";
+import {
+  PREVIEW_SUPPLIER_APPLICATIONS,
+  PREVIEW_SUPPLIER_APPLICATION_SCORES,
+} from "@/lib/supplier-application/preview";
+import { getLatestSupplierFitScoresForApplications } from "@/lib/supplier-application/scoring-repository";
 import type { SupplierApplicationListRow } from "@/lib/supplier-application/types";
+import type { StoredSupplierFitScore } from "@/lib/supplier-application/scoring-repository";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { KpiCard, KpiGrid, PreviewDataBanner } from "@/components/ui";
 import { SupplierApplicationsList } from "./SupplierApplicationsList";
@@ -16,12 +21,26 @@ async function load(): Promise<SupplierApplicationListRow[] | null> {
   }
 }
 
+async function loadScores(
+  applicationIds: string[],
+): Promise<Map<string, StoredSupplierFitScore> | null> {
+  try {
+    return await getLatestSupplierFitScoresForApplications(applicationIds);
+  } catch {
+    return null;
+  }
+}
+
 export default async function SupplierApplicationsPage() {
   const user = await getOptionalUser();
   const isAdmin = user?.role === "asgard_admin";
   const live = isAdmin ? await load() : null;
   const previewMode = !isAdmin || live === null;
   const rows = previewMode ? PREVIEW_SUPPLIER_APPLICATIONS : (live ?? []);
+
+  const scores: Map<string, StoredSupplierFitScore> = previewMode
+    ? PREVIEW_SUPPLIER_APPLICATION_SCORES
+    : (await loadScores(rows.map((r) => r.id))) ?? new Map();
 
   const totals = {
     all: rows.length,
@@ -55,7 +74,11 @@ export default async function SupplierApplicationsPage() {
         />
       </KpiGrid>
 
-      <SupplierApplicationsList rows={rows} previewMode={previewMode} />
+      <SupplierApplicationsList
+        rows={rows}
+        previewMode={previewMode}
+        scores={Object.fromEntries(scores)}
+      />
     </>
   );
 }

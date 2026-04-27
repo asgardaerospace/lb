@@ -7,6 +7,10 @@ import {
   transitionSupplierApplication,
 } from "@/lib/supplier-application/repository";
 import { SUPPLIER_REVIEW_ACTIONS } from "@/lib/supplier-application/types";
+import {
+  computeAndStoreSupplierFitScore,
+  getLatestSupplierFitScore,
+} from "@/lib/supplier-application/scoring-repository";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +46,26 @@ export async function PATCH(
         reviewerOrganizationId: admin.organization_id,
         notes: parsed.data.notes ?? null,
       });
+
+      // Best-effort: when an admin first marks the application under review,
+      // auto-score if no readiness score exists yet. Failures here must NOT
+      // fail the transition response — surface them in dev logs only.
+      if (parsed.data.action === "mark_under_review") {
+        try {
+          const existing = await getLatestSupplierFitScore(id);
+          if (!existing) {
+            await computeAndStoreSupplierFitScore(id, { computedBy: admin.id });
+          }
+        } catch (scoreErr) {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn(
+              "[supplier-application] auto-score failed:",
+              scoreErr instanceof Error ? scoreErr.message : scoreErr,
+            );
+          }
+        }
+      }
+
       return NextResponse.json({ application: result }, { status: 200 });
     } catch (err) {
       if (err instanceof SupplierTransitionError) {

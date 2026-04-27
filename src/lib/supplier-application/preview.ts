@@ -1,4 +1,5 @@
 import type { SupplierApplicationListRow } from "./types";
+import type { StoredSupplierFitScore } from "./scoring-repository";
 
 /**
  * Illustrative supplier-application rows for the admin list when there's
@@ -81,3 +82,113 @@ export const PREVIEW_SUPPLIER_APPLICATIONS: SupplierApplicationListRow[] = [
     created_at: "2026-04-09T12:30:00Z",
   },
 ];
+
+const PREVIEW_MODEL_ID = "model-prev-supplier-readiness-v2";
+
+function previewScore(
+  appId: string,
+  composite: number,
+  recommendation: "routing_ready" | "qualified" | "conditional" | "defer",
+  dimensions: Record<string, number>,
+  hardGateFailures: string[],
+  computedAt: string,
+): StoredSupplierFitScore {
+  return {
+    id: `score-prev-${appId}`,
+    application_id: appId,
+    model_id: PREVIEW_MODEL_ID,
+    composite_score: composite,
+    dimensions,
+    hard_gate_failures: hardGateFailures,
+    computed_at: computedAt,
+    computed_by: null,
+    model_version: 2,
+    recommendation,
+  };
+}
+
+export const PREVIEW_SUPPLIER_APPLICATION_SCORES: Map<
+  string,
+  StoredSupplierFitScore
+> = new Map([
+  [
+    "sa-prev-1",
+    previewScore(
+      "sa-prev-1",
+      88,
+      "routing_ready",
+      {
+        compliance: 100,
+        capability_breadth: 80,
+        machine_sophistication: 90,
+        past_performance: 80,
+        workforce_scale: 80,
+        quality_indicators: 80,
+        specialization: 90,
+      },
+      [],
+      "2026-04-25T15:30:00Z",
+    ),
+  ],
+  [
+    "sa-prev-2",
+    previewScore(
+      "sa-prev-2",
+      72,
+      "qualified",
+      {
+        compliance: 30,
+        capability_breadth: 80,
+        machine_sophistication: 75,
+        past_performance: 90,
+        workforce_scale: 80,
+        quality_indicators: 60,
+        specialization: 80,
+      },
+      ["No CMMC level — verify scope before CUI work."],
+      "2026-04-23T08:30:00Z",
+    ),
+  ],
+  [
+    "sa-prev-3",
+    previewScore(
+      "sa-prev-3",
+      63,
+      "conditional",
+      {
+        compliance: 70,
+        capability_breadth: 60,
+        machine_sophistication: 50,
+        past_performance: 60,
+        workforce_scale: 50,
+        quality_indicators: 60,
+        specialization: 80,
+      },
+      [],
+      "2026-04-21T14:10:00Z",
+    ),
+  ],
+  [
+    "sa-prev-4",
+    previewScore(
+      "sa-prev-4",
+      48,
+      "defer",
+      {
+        compliance: 0,
+        capability_breadth: 35,
+        machine_sophistication: 60,
+        past_performance: 30,
+        workforce_scale: 50,
+        quality_indicators: 20,
+        specialization: 80,
+      },
+      [
+        "No certifications declared.",
+        "Single-process specialist — limited routing breadth.",
+      ],
+      "2026-04-14T11:30:00Z",
+    ),
+  ],
+  // sa-prev-5 intentionally has no score so the list shows the "—" state
+]);

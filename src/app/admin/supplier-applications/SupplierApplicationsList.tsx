@@ -13,6 +13,11 @@ import type {
   SupplierApplicationListRow,
   SupplierApplicationStatus,
 } from "@/lib/supplier-application/types";
+import type { StoredSupplierFitScore } from "@/lib/supplier-application/scoring-repository";
+import {
+  recommendationLabel,
+  recommendationTone,
+} from "@/lib/supplier-application/scoring";
 
 type StatusFilter = "all" | SupplierApplicationStatus;
 type ItarFilter = "all" | "yes" | "no";
@@ -36,9 +41,11 @@ const ITAR_FILTERS: { value: ItarFilter; label: string }[] = [
 export function SupplierApplicationsList({
   rows,
   previewMode,
+  scores,
 }: {
   rows: SupplierApplicationListRow[];
   previewMode: boolean;
+  scores: Record<string, StoredSupplierFitScore>;
 }) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [itarFilter, setItarFilter] = useState<ItarFilter>("all");
@@ -127,6 +134,27 @@ export function SupplierApplicationsList({
           {[r.hq_state, r.hq_country].filter(Boolean).join(", ") || "—"}
         </span>
       ),
+    },
+    {
+      key: "score",
+      header: "Readiness",
+      align: "right",
+      render: (r) => {
+        const s = scores[r.id];
+        if (!s) {
+          return <span className="text-xs text-slate-600">— not scored</span>;
+        }
+        return (
+          <div className="flex items-center justify-end gap-2">
+            <span className="font-mono text-sm tabular-nums text-slate-100">
+              {s.composite_score}
+            </span>
+            <StatusBadge tone={recommendationTone(s.recommendation)} dot={false}>
+              {recommendationLabel(s.recommendation)}
+            </StatusBadge>
+          </div>
+        );
+      },
     },
     {
       key: "submitted",
