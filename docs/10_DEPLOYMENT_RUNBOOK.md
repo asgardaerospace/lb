@@ -15,7 +15,7 @@ before continuing.
 | Migrations introduced since last deploy | `0006`, `0007`, `0008`, `0009` |
 | Intake migrations (Phase 1, schema-only) | `0010`, `0011`, `0012`, `0013`, `0014` |
 | Customer-application conversion (Phase 4) | `0015_customer_application_conversion.sql` — adds `converted` status, customer-side FK linkage, and `convert_customer_application(uuid, uuid)` SECURITY DEFINER function |
-| Supplier-application conversion deferred | `supabase/proposed/0015_supplier_application_conversion.sql` — held back until the supplier intake flow is built |
+| Supplier-application conversion (Phase 4-supplier) | `0016_supplier_application_conversion.sql` — adds `converted` status to supplier_application_status, supplier-side FK linkage, `supplier_profiles.source_application_id`, and `convert_supplier_application(uuid, uuid)` SECURITY DEFINER function |
 | Storage bucket required | `launchbelt-documents` (private) |
 
 To verify your local checkout is at the right tip:
@@ -147,11 +147,19 @@ Or if you prefer to apply files individually (Dashboard → SQL Editor):
     an `audit_logs` row with `action='customer_application.converted'`.
     Refuses to re-run once status is `converted`.
 
-> **Supplier-side conversion still deferred.**
-> `supabase/proposed/0015_supplier_application_conversion.sql` mirrors the
-> customer flow for `supplier_applications` and adds
-> `supplier_profiles.source_application_id`. Promote only after the
-> supplier intake wizard, API, and admin review console are built.
+11. `supabase/migrations/0016_supplier_application_conversion.sql`
+    Phase 4-supplier. Adds the `converted` value to the
+    `supplier_application_status` enum, the FK linkage columns
+    `supplier_applications.converted_profile_id` ⇄
+    `supplier_profiles.source_application_id`, and the SECURITY DEFINER
+    function `convert_supplier_application(application_id uuid,
+    admin_user_id uuid) returns jsonb`. The function provisions a
+    supplier organization if the application was anonymous, UPSERTs
+    `supplier_profiles`, refreshes `certifications` / `machines` /
+    `capabilities` for the org via delete-then-insert, flips status to
+    `converted`, and writes an `audit_logs` row with
+    `action='supplier_application.converted'`. Refuses to re-run once
+    status is `converted`.
 
 After all nine are applied, verify in the SQL editor:
 
@@ -199,13 +207,17 @@ select unnest(enum_range(null::document_entity_type))::text;
 -- v1 scoring models seeded
 select kind, version, active from scoring_models order by kind, version;
 
--- conversion function present + new enum value
+-- conversion functions present + new enum values
 select proname from pg_proc
-  where proname = 'convert_customer_application';
+  where proname in ('convert_customer_application', 'convert_supplier_application')
+  order by proname;
 
 select unnest(enum_range(null::customer_application_status))::text;
 -- expect: draft, submitted, under_review, approved, rejected,
 --         revisions_requested, withdrawn, converted
+
+select unnest(enum_range(null::supplier_application_status))::text;
+-- expect: same set as customer_application_status
 ```
 
 All queries should return non-empty results. The scoring models query
@@ -296,7 +308,7 @@ is the runtime behavior for each missing piece:
 | Migrations `0010`–`0014` not applied | Intake persistence | **No user-visible impact in this release.** Phase 1 is schema-only — no submit RPC, no admin list view, no UI wiring. The customer onboarding wizard at `/onboarding` continues to use `localStorage` exclusively; the supplier application wizard remains design-only. The new tables stay empty. |
 | Migration `0014` partially applied (enum extended but FK fails) | Intake document attachment | Will not happen in normal flow — the FK is enum-free and runs in the same transaction as the enum addition. If it does fail in isolation, document upload via `/api/documents/upload` continues to function for existing entity types (`rfq`/`part`/`quote`/`job`); attaching to applications would 500 because the FK constraint is missing. |
 | Migration `0015` not applied | Customer conversion | Admin "Convert to customer profile" button POSTs to the convert API which fails because `convert_customer_application` does not exist. Approved applications stay in `approved` state and no `customer_profiles` rows are written. The rest of the admin review flow keeps working. |
-| `supabase/proposed/0015_supplier_application_conversion.sql` intentionally not applied | Supplier conversion | Expected. There is no admin UI for supplier conversion yet; the function is deferred until supplier intake ships. |
+| Migration `0016` not applied | Supplier conversion | Admin "Convert to supplier profile" button POSTs to the convert API which fails because `convert_supplier_application` does not exist. Approved supplier applications stay in `approved` state and no `supplier_profiles` rows are written. The rest of the admin review flow keeps working. |
 
 In all cases the rest of the application continues to function. Apply the
 missed migration and the corresponding feature lights up without redeploying

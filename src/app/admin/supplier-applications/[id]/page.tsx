@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getOptionalUser } from "@/lib/auth";
 import { getSupplierApplicationFull } from "@/lib/supplier-application/repository";
 import { getLatestSupplierFitScore } from "@/lib/supplier-application/scoring-repository";
+import { getMaterializedSupplierBundleForApplication } from "@/lib/supplier-application/conversion-repository";
 import {
   recommendationLabel,
   recommendationTone,
@@ -75,7 +76,10 @@ export default async function SupplierApplicationDetailPage({
 
   // Always compute live score so risk flags / strengths / tags stay current.
   const live = scoreSupplierApplication(full);
-  const stored = await getLatestSupplierFitScore(a.id).catch(() => null);
+  const [stored, bundle] = await Promise.all([
+    getLatestSupplierFitScore(a.id).catch(() => null),
+    getMaterializedSupplierBundleForApplication(a.id).catch(() => null),
+  ]);
   const display = stored
     ? {
         composite: stored.composite_score,
@@ -149,6 +153,115 @@ export default async function SupplierApplicationDetailPage({
           </span>
         </KvCard>
       </div>
+
+      {/* Materialized supplier profile (post-conversion) */}
+      {bundle && (
+        <>
+          <SectionHeader
+            title="Materialized supplier profile"
+            subtitle={`Provisioned ${new Date(bundle.profile.created_at).toLocaleString()} · approval_status = ${bundle.profile.approval_status}`}
+          />
+          <Card>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="rounded-md border border-emerald-500/25 bg-emerald-500/[0.04] p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300">
+                  Organization
+                </div>
+                <div className="mt-1 text-[14px] font-medium text-slate-100">
+                  {bundle.organization.name}
+                </div>
+                <div className="mt-1 font-mono text-[11px] text-slate-500">
+                  {bundle.organization.id.slice(0, 8)} ·{" "}
+                  {bundle.organization.type}
+                  {bundle.organization.itar_registered ? " · ITAR" : ""}
+                </div>
+                <div className="mt-2 font-mono text-[10.5px] text-slate-500">
+                  Created{" "}
+                  {new Date(bundle.organization.created_at).toLocaleDateString()}
+                </div>
+              </div>
+
+              <div className="rounded-md border border-cyan-500/25 bg-cyan-500/[0.04] p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">
+                  Supplier profile
+                </div>
+                <div className="mt-1 text-[14px] font-medium text-slate-100">
+                  {bundle.profile.approval_status}
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[10.5px] text-slate-500">
+                  <span>AS9100</span>
+                  <span className="text-slate-300">
+                    {bundle.profile.as9100_certified ? "✓" : "—"}
+                  </span>
+                  <span>ISO9001</span>
+                  <span className="text-slate-300">
+                    {bundle.profile.iso9001_certified ? "✓" : "—"}
+                  </span>
+                  <span>ITAR</span>
+                  <span className="text-slate-300">
+                    {bundle.profile.itar_registered ? "✓" : "—"}
+                  </span>
+                  <span>CMMC</span>
+                  <span className="text-slate-300">
+                    {bundle.profile.cmmc_status.replace("_", " ")}
+                  </span>
+                  <span>Headcount</span>
+                  <span className="text-slate-300 tabular-nums">
+                    {bundle.profile.employee_count ?? "—"}
+                  </span>
+                  <span>Facility</span>
+                  <span className="text-slate-300 tabular-nums">
+                    {bundle.profile.facility_size_sqft
+                      ? `${bundle.profile.facility_size_sqft.toLocaleString()} sqft`
+                      : "—"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-slate-800 bg-slate-950/40 p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Capabilities overview
+                </div>
+                <div className="mt-1 grid grid-cols-3 gap-2 text-center">
+                  <CountTile
+                    label="Certifications"
+                    value={bundle.certifications.length}
+                  />
+                  <CountTile
+                    label="Machines"
+                    value={bundle.machines.length}
+                  />
+                  <CountTile
+                    label="Capabilities"
+                    value={bundle.capabilities.length}
+                  />
+                </div>
+                {bundle.capabilities.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {bundle.capabilities.slice(0, 8).map((c) => (
+                      <StatusBadge key={c.id} tone="info" dot={false}>
+                        {c.process_type}
+                      </StatusBadge>
+                    ))}
+                    {bundle.capabilities.length > 8 && (
+                      <span className="font-mono text-[10.5px] text-slate-500">
+                        +{bundle.capabilities.length - 8}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <p className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-slate-500">
+              Supplier is in the routing candidate pool. Invite a supplier
+              admin once auth is wired (deferred to Phase 5-supplier).
+            </p>
+          </Card>
+
+          <div className="h-5" />
+        </>
+      )}
 
       {/* Supplier readiness score */}
       <SectionHeader
@@ -584,4 +697,17 @@ function fmtDate(iso: string | null): string {
 function fmtDateTime(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString();
+}
+
+function CountTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-slate-800 bg-slate-900/60 px-2 py-2">
+      <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-slate-500">
+        {label}
+      </div>
+      <div className="mt-0.5 text-lg font-semibold tabular-nums text-slate-100">
+        {value}
+      </div>
+    </div>
+  );
 }

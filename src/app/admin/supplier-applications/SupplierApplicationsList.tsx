@@ -28,6 +28,7 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "under_review", label: "Under review" },
   { value: "revisions_requested", label: "Revisions requested" },
   { value: "approved", label: "Approved" },
+  { value: "converted", label: "Converted" },
   { value: "rejected", label: "Rejected" },
   { value: "withdrawn", label: "Withdrawn" },
 ];

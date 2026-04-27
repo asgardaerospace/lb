@@ -133,7 +133,8 @@ export type SupplierApplicationStatus =
   | "approved"
   | "rejected"
   | "revisions_requested"
-  | "withdrawn";
+  | "withdrawn"
+  | "converted";
 
 export const SUPPLIER_REVIEW_ACTIONS = [
   "mark_under_review",
@@ -239,6 +240,79 @@ export interface SupplierApplicationFull {
   capabilities: SupplierApplicationCapabilityRow[];
   past_performance: SupplierApplicationPastPerformanceRow[];
   reviews: SupplierApplicationReviewRow[];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Materialized supplier profile (Phase 4 conversion output)
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface MaterializedSupplierOrganization {
+  id: string;
+  name: string;
+  type: string;
+  itar_registered: boolean;
+  created_at: string;
+}
+
+export interface MaterializedSupplierProfile {
+  id: string;
+  organization_id: string;
+  source_application_id: string | null;
+  approval_status: string;
+  company_summary: string | null;
+  facility_size_sqft: number | null;
+  employee_count: number | null;
+  quality_system_notes: string | null;
+  capacity_notes: string | null;
+  as9100_certified: boolean;
+  iso9001_certified: boolean;
+  itar_registered: boolean;
+  cmmc_status: string;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MaterializedOperationalCertification {
+  id: string;
+  type: string;
+  expiration_date: string | null;
+  verification_status: string;
+}
+
+export interface MaterializedOperationalMachine {
+  id: string;
+  machine_type: string;
+  materials_supported: string[];
+  capacity: string | null;
+}
+
+export interface MaterializedOperationalCapability {
+  id: string;
+  process_type: string;
+  materials_supported: string[];
+}
+
+export interface MaterializedSupplierBundle {
+  organization: MaterializedSupplierOrganization;
+  profile: MaterializedSupplierProfile;
+  certifications: MaterializedOperationalCertification[];
+  machines: MaterializedOperationalMachine[];
+  capabilities: MaterializedOperationalCapability[];
+}
+
+export interface SupplierConversionResult {
+  profile_id: string;
+  organization_id: string;
+  application_id: string;
+  status: SupplierApplicationStatus;
+  organization_created: boolean;
+  profile_created: boolean;
+  cert_count: number;
+  machine_count: number;
+  capability_count: number;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

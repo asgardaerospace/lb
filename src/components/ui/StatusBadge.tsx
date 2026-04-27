@@ -72,6 +72,7 @@ export const supplierApplicationStatusMap: StatusMap = {
   rejected: { label: "Rejected", tone: "danger" },
   revisions_requested: { label: "Revisions Requested", tone: "warn" },
   withdrawn: { label: "Withdrawn", tone: "neutral" },
+  converted: { label: "Converted", tone: "success" },
 };
 
 export const customerApplicationStatusMap: StatusMap = {

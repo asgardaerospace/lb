@@ -10,6 +10,7 @@ import {
 } from "@/lib/supplier-application/types";
 
 type ScoreState = "idle" | "running" | "ok" | "err";
+type ConvertState = "idle" | "running" | "ok" | "err";
 
 const LABEL: Record<SupplierReviewAction, string> = {
   mark_under_review: "Mark under review",
@@ -28,9 +29,9 @@ const VARIANT: Record<SupplierReviewAction, "primary" | "secondary" | "danger"> 
 const REQUIRES_NOTES: SupplierReviewAction[] = ["request_info", "reject"];
 
 const TERMINAL: SupplierApplicationStatus[] = [
-  "approved",
   "rejected",
   "withdrawn",
+  "converted",
 ];
 
 export default function ReviewActions({
@@ -49,8 +50,62 @@ export default function ReviewActions({
   } | null>(null);
   const [scoreState, setScoreState] = useState<ScoreState>("idle");
   const [scoreMessage, setScoreMessage] = useState<string | null>(null);
+  const [convertState, setConvertState] = useState<ConvertState>("idle");
+  const [convertMessage, setConvertMessage] = useState<string | null>(null);
 
   const terminal = TERMINAL.includes(status);
+  const convertible = status === "approved";
+
+  async function convert() {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "Convert this application into a supplier profile? This provisions an organization (if needed), creates the supplier_profile, and refreshes operational certifications / machines / capabilities. Status flips to 'converted'.",
+      )
+    ) {
+      return;
+    }
+    setConvertState("running");
+    setConvertMessage(null);
+    try {
+      const res = await fetch(
+        `/api/admin/supplier-applications/${applicationId}/convert`,
+        { method: "POST" },
+      );
+      const parsed = (await res.json().catch(() => ({}))) as {
+        conversion?: {
+          profile_id: string;
+          organization_id: string;
+          organization_created: boolean;
+          profile_created: boolean;
+          cert_count: number;
+          machine_count: number;
+          capability_count: number;
+        };
+        error?: string;
+        message?: string;
+        code?: string;
+      };
+      if (!res.ok) {
+        setConvertState("err");
+        setConvertMessage(
+          parsed.message ?? parsed.error ?? `Conversion failed (${res.status})`,
+        );
+        return;
+      }
+      setConvertState("ok");
+      const c = parsed.conversion;
+      setConvertMessage(
+        c
+          ? `Profile ${c.profile_id.slice(0, 8)} provisioned · ${c.cert_count} certifications · ${c.machine_count} machines · ${c.capability_count} capabilities${c.organization_created ? " · new organization" : " · existing organization"}.`
+          : "Converted.",
+      );
+      router.refresh();
+    } catch (err) {
+      setConvertState("err");
+      setConvertMessage(err instanceof Error ? err.message : "Network error");
+    }
+  }
 
   async function generateScore() {
     setScoreState("running");
@@ -149,14 +204,60 @@ export default function ReviewActions({
           This application is{" "}
           <span className="font-mono text-slate-200">
             {status.replace("_", " ")}
-          </span>{" "}
-          — no further state changes are available from this screen.
+          </span>
+          {status === "converted"
+            ? " — see the materialized supplier profile above."
+            : " — no further state changes are available from this screen."}
         </p>
         <ScoreControl
           state={scoreState}
           message={scoreMessage}
           onClick={generateScore}
         />
+      </section>
+    );
+  }
+
+  if (convertible) {
+    return (
+      <section className="space-y-4">
+        <p className="text-sm text-slate-300">
+          Application is approved. Convert it to materialize the operational
+          supplier profile and refresh certifications, machines, and
+          capabilities.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={convert}
+            disabled={convertState === "running"}
+          >
+            {convertState === "running"
+              ? "Converting…"
+              : "Convert to supplier profile →"}
+          </Button>
+          <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-slate-500">
+            Idempotent SQL — provisions org if needed, UPSERTs profile + child rows.
+          </span>
+          {convertMessage && (
+            <span
+              role={convertState === "err" ? "alert" : "status"}
+              className={`text-xs ${
+                convertState === "err" ? "text-rose-300" : "text-emerald-300"
+              }`}
+            >
+              {convertMessage}
+            </span>
+          )}
+        </div>
+        <div className="border-t border-slate-800 pt-3">
+          <ScoreControl
+            state={scoreState}
+            message={scoreMessage}
+            onClick={generateScore}
+          />
+        </div>
       </section>
     );
   }
