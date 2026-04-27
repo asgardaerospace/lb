@@ -4,6 +4,11 @@ import { getSupplierApplicationFull } from "@/lib/supplier-application/repositor
 import { getLatestSupplierFitScore } from "@/lib/supplier-application/scoring-repository";
 import { getMaterializedSupplierBundleForApplication } from "@/lib/supplier-application/conversion-repository";
 import {
+  listSupplierInviteHistoryForOrganization,
+  listUsersForSupplierOrganization,
+} from "@/lib/supplier-application/invite-repository";
+import { SupplierAccessPanel } from "./SupplierAccessPanel";
+import {
   recommendationLabel,
   recommendationTone,
   scoreSupplierApplication,
@@ -75,11 +80,26 @@ export default async function SupplierApplicationDetailPage({
   const { label, tone } = mapStatus(supplierApplicationStatusMap, a.status);
 
   // Always compute live score so risk flags / strengths / tags stay current.
+  // The stored row provides the persisted composite + dimension breakdown
+  // (which may be stale if the application was edited after scoring).
   const live = scoreSupplierApplication(full);
   const [stored, bundle] = await Promise.all([
     getLatestSupplierFitScore(a.id).catch(() => null),
     getMaterializedSupplierBundleForApplication(a.id).catch(() => null),
   ]);
+
+  const [inviteHistory, orgUsers] = bundle
+    ? await Promise.all([
+        listSupplierInviteHistoryForOrganization(bundle.organization.id).catch(
+          () => [],
+        ),
+        listUsersForSupplierOrganization(bundle.organization.id).catch(
+          () => [],
+        ),
+      ])
+    : [[], []];
+
+  const defaultInviteEmail = a.intake_email ?? "";
   const display = stored
     ? {
         composite: stored.composite_score,
@@ -123,6 +143,7 @@ export default async function SupplierApplicationDetailPage({
         actions={<StatusBadge tone={tone}>{label}</StatusBadge>}
       />
 
+      {/* Headline KVs */}
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KvCard label="Submitted">{fmtDate(a.submitted_at)}</KvCard>
         <KvCard label="Last reviewed">{fmtDate(a.reviewed_at)}</KvCard>
@@ -163,6 +184,7 @@ export default async function SupplierApplicationDetailPage({
           />
           <Card>
             <div className="grid gap-4 lg:grid-cols-3">
+              {/* Organization */}
               <div className="rounded-md border border-emerald-500/25 bg-emerald-500/[0.04] p-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300">
                   Organization
@@ -181,6 +203,7 @@ export default async function SupplierApplicationDetailPage({
                 </div>
               </div>
 
+              {/* Supplier profile */}
               <div className="rounded-md border border-cyan-500/25 bg-cyan-500/[0.04] p-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">
                   Supplier profile
@@ -218,6 +241,7 @@ export default async function SupplierApplicationDetailPage({
                 </div>
               </div>
 
+              {/* Counts */}
               <div className="rounded-md border border-slate-800 bg-slate-950/40 p-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                   Capabilities overview
@@ -255,8 +279,16 @@ export default async function SupplierApplicationDetailPage({
 
             <p className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-slate-500">
               Supplier is in the routing candidate pool. Invite a supplier
-              admin once auth is wired (deferred to Phase 5-supplier).
+              admin below to grant portal access.
             </p>
+
+            <SupplierAccessPanel
+              applicationId={a.id}
+              defaultEmail={defaultInviteEmail}
+              initialUsers={orgUsers}
+              initialHistory={inviteHistory}
+              organizationName={bundle.organization.name}
+            />
           </Card>
 
           <div className="h-5" />
@@ -376,6 +408,7 @@ export default async function SupplierApplicationDetailPage({
 
       <div className="h-5" />
 
+      {/* Compliance + primary processes */}
       <SectionHeader
         title="Compliance & primary processes"
         subtitle="What this supplier can run, gated by what they're certified for."
@@ -408,6 +441,7 @@ export default async function SupplierApplicationDetailPage({
       </Card>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        {/* Capabilities */}
         <div>
           <SectionHeader
             title={`Capabilities (${full.capabilities.length})`}
@@ -453,6 +487,7 @@ export default async function SupplierApplicationDetailPage({
           </Card>
         </div>
 
+        {/* Machines */}
         <div>
           <SectionHeader title={`Machines (${full.machines.length})`} />
           <Card>
@@ -498,6 +533,7 @@ export default async function SupplierApplicationDetailPage({
           </Card>
         </div>
 
+        {/* Certifications */}
         <div>
           <SectionHeader
             title={`Certifications (${full.certifications.length})`}
@@ -537,6 +573,7 @@ export default async function SupplierApplicationDetailPage({
           </Card>
         </div>
 
+        {/* Past performance */}
         <div>
           <SectionHeader
             title={`Past performance (${full.past_performance.length})`}
@@ -590,6 +627,7 @@ export default async function SupplierApplicationDetailPage({
         </div>
       </div>
 
+      {/* Review actions */}
       <SectionHeader
         title="Review"
         subtitle="Status transitions append to the review trail and emit audit_logs."
@@ -609,6 +647,7 @@ export default async function SupplierApplicationDetailPage({
         )}
       </Card>
 
+      {/* Review trail */}
       {full.reviews.length > 0 && (
         <>
           <SectionHeader title={`Review trail (${full.reviews.length})`} />
@@ -645,6 +684,7 @@ export default async function SupplierApplicationDetailPage({
         </>
       )}
 
+      {/* Raw payload */}
       <SectionHeader
         title="Raw payload (JSONB snapshot)"
         subtitle={`payload_schema_version = ${a.payload_schema_version}`}
