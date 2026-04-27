@@ -1,9 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { createServiceSupabase } from "@/lib/supabase/server";
 import {
+  type CustomerApplicationDetail,
+  type CustomerApplicationFull,
+  type CustomerApplicationListRow,
   type CustomerApplicationPayload,
+  type CustomerApplicationStatus,
   type CustomerApplicationSubmitInput,
+  type ReviewAction,
   type SubmittedCustomerApplication,
+  REVIEW_ACTION_TO_STATUS,
   deriveCustomerTier,
   toIntegerOrNull,
 } from "./types";
@@ -200,4 +206,285 @@ export async function submitCustomerApplication(
 function clampToByte(n: number): number {
   if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Admin reads
+// ════════════════════════════════════════════════════════════════════════════
+
+const LIST_COLUMNS = `
+  id, status, legal_name, dba, hq_state, hq_country, org_type, derived_tier,
+  itar, defense_program, intake_email, submitted_at, reviewed_at, created_at
+`;
+
+export async function listCustomerApplications(): Promise<
+  CustomerApplicationListRow[]
+> {
+  const supabase = createServiceSupabase();
+  const { data, error } = await supabase
+    .from("customer_applications")
+    .select(LIST_COLUMNS)
+    .neq("status", "draft")
+    .order("submitted_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+  if (error) {
+    throw new Error(`customer_applications list failed: ${error.message}`);
+  }
+  return (data ?? []) as unknown as CustomerApplicationListRow[];
+}
+
+const DETAIL_COLUMNS = `
+  id, status, legal_name, dba, website, hq_city, hq_state, hq_country,
+  team_size, org_type, funding_stage, derived_tier,
+  itar, cui, as9100, nadcap, defense_program, cmmc_level,
+  geography, cost_vs_speed, risk_tolerance, suppliers_per_part,
+  typical_lead_time_weeks, lead_time_tolerance, first_use_action,
+  workspace_name, workspace_subdomain, data_residency, sso_provider,
+  initial_seats, payload, payload_schema_version,
+  intake_email, intake_token, organization_id,
+  submitted_at, reviewed_at, reviewed_by, decision_notes, created_at
+`;
+
+export async function getCustomerApplicationFull(
+  id: string,
+): Promise<CustomerApplicationFull | null> {
+  const supabase = createServiceSupabase();
+  const appRes = await supabase
+    .from("customer_applications")
+    .select(DETAIL_COLUMNS)
+    .eq("id", id)
+    .maybeSingle();
+  if (appRes.error) {
+    throw new Error(
+      `customer_applications detail fetch failed: ${appRes.error.message}`,
+    );
+  }
+  if (!appRes.data) return null;
+  const application = appRes.data as unknown as CustomerApplicationDetail;
+
+  const [progRes, procRes, contactRes, defRes, revRes] = await Promise.all([
+    supabase
+      .from("customer_application_programs")
+      .select("id, program_category, stage, annual_volume, notes")
+      .eq("application_id", id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("customer_application_processes")
+      .select("id, process_type")
+      .eq("application_id", id)
+      .order("process_type", { ascending: true }),
+    supabase
+      .from("customer_application_contacts")
+      .select("id, role, name, title, email, phone")
+      .eq("application_id", id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("customer_application_defense_programs")
+      .select(
+        "id, program_name, prime_contractor, contract_vehicle, dpas_rating, far_clauses, notes",
+      )
+      .eq("application_id", id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("customer_application_reviews")
+      .select("id, reviewer_id, action, notes, metadata, created_at")
+      .eq("application_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  for (const [label, res] of Object.entries({
+    programs: progRes,
+    processes: procRes,
+    contacts: contactRes,
+    defense_programs: defRes,
+    reviews: revRes,
+  })) {
+    if (res.error) {
+      throw new Error(
+        `customer_application_${label} fetch failed: ${res.error.message}`,
+      );
+    }
+  }
+
+  const reviewerIds = Array.from(
+    new Set(
+      (revRes.data ?? [])
+        .map((r) => (r as { reviewer_id: string }).reviewer_id)
+        .filter(Boolean),
+    ),
+  );
+  let reviewerEmail = new Map<string, string>();
+  if (reviewerIds.length) {
+    const usersRes = await supabase
+      .from("users")
+      .select("id, email")
+      .in("id", reviewerIds);
+    if (!usersRes.error && usersRes.data) {
+      reviewerEmail = new Map(
+        (usersRes.data as { id: string; email: string }[]).map((u) => [
+          u.id,
+          u.email,
+        ]),
+      );
+    }
+  }
+
+  const reviews = (
+    (revRes.data ?? []) as unknown as Array<{
+      id: string;
+      reviewer_id: string;
+      action: string;
+      notes: string | null;
+      metadata: Record<string, unknown> | null;
+      created_at: string;
+    }>
+  ).map((r) => ({
+    ...r,
+    reviewer_email: reviewerEmail.get(r.reviewer_id) ?? null,
+  }));
+
+  return {
+    application,
+    programs: (progRes.data ?? []) as CustomerApplicationFull["programs"],
+    processes: (procRes.data ?? []) as CustomerApplicationFull["processes"],
+    contacts: (contactRes.data ?? []) as CustomerApplicationFull["contacts"],
+    defense_programs: (defRes.data ?? []) as CustomerApplicationFull["defense_programs"],
+    reviews,
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Status transitions (admin-only)
+// ════════════════════════════════════════════════════════════════════════════
+
+const ALLOWED_FROM: Record<ReviewAction, CustomerApplicationStatus[]> = {
+  mark_under_review: ["submitted"],
+  request_info: ["submitted", "under_review"],
+  approve: ["submitted", "under_review"],
+  reject: ["submitted", "under_review"],
+};
+
+export class TransitionError extends Error {
+  constructor(
+    message: string,
+    public status: number = 409,
+  ) {
+    super(message);
+  }
+}
+
+export interface TransitionOptions {
+  reviewerId: string;
+  reviewerOrganizationId: string;
+  notes?: string | null;
+}
+
+export interface TransitionResult {
+  id: string;
+  status: CustomerApplicationStatus;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+}
+
+export async function transitionCustomerApplication(
+  id: string,
+  action: ReviewAction,
+  opts: TransitionOptions,
+): Promise<TransitionResult> {
+  const supabase = createServiceSupabase();
+
+  const cur = await supabase
+    .from("customer_applications")
+    .select("id, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (cur.error) {
+    throw new Error(`customer_applications lookup failed: ${cur.error.message}`);
+  }
+  if (!cur.data) {
+    throw new TransitionError("Application not found", 404);
+  }
+  const current = cur.data as { id: string; status: CustomerApplicationStatus };
+
+  const allowed = ALLOWED_FROM[action];
+  if (!allowed.includes(current.status)) {
+    throw new TransitionError(
+      `Action '${action}' is not allowed from status '${current.status}'`,
+      409,
+    );
+  }
+
+  const next = REVIEW_ACTION_TO_STATUS[action];
+  const reviewedAt = new Date().toISOString();
+  const trimmedNotes = opts.notes?.trim() || null;
+
+  const upd = await supabase
+    .from("customer_applications")
+    .update({
+      status: next,
+      reviewed_at: reviewedAt,
+      reviewed_by: opts.reviewerId,
+      decision_notes: trimmedNotes ?? null,
+    })
+    .eq("id", id)
+    .select("id, status, reviewed_at, reviewed_by")
+    .single();
+  if (upd.error || !upd.data) {
+    throw new Error(
+      `customer_applications update failed: ${
+        upd.error?.message ?? "no row returned"
+      }`,
+    );
+  }
+
+  const reviewIns = await supabase
+    .from("customer_application_reviews")
+    .insert({
+      application_id: id,
+      reviewer_id: opts.reviewerId,
+      action,
+      notes: trimmedNotes,
+      metadata: {
+        prior_status: current.status,
+        new_status: next,
+      },
+    });
+  if (reviewIns.error) {
+    throw new Error(
+      `customer_application_reviews insert failed: ${reviewIns.error.message}`,
+    );
+  }
+
+  const baseAudit = {
+    entity_type: "customer_application",
+    entity_id: id,
+    user_id: opts.reviewerId,
+    organization_id: opts.reviewerOrganizationId,
+  };
+  const auditRows = [
+    {
+      ...baseAudit,
+      action: "customer_application.reviewed",
+      metadata: { review_action: action, has_notes: !!trimmedNotes },
+    },
+    {
+      ...baseAudit,
+      action: "customer_application.status_changed",
+      metadata: { from: current.status, to: next, review_action: action },
+    },
+  ];
+  const auditRes = await supabase.from("audit_logs").insert(auditRows);
+  if (auditRes.error && process.env.NODE_ENV !== "production") {
+    console.warn(
+      "[customer-application] audit insert failed:",
+      auditRes.error.message,
+    );
+  }
+
+  return {
+    id: upd.data.id as string,
+    status: upd.data.status as CustomerApplicationStatus,
+    reviewed_at: upd.data.reviewed_at as string | null,
+    reviewed_by: upd.data.reviewed_by as string | null,
+  };
 }

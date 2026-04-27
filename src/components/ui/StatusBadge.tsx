@@ -64,6 +64,30 @@ export const jobStatusMap: StatusMap = {
   cancelled: { label: "Cancelled", tone: "danger" },
 };
 
+export const customerApplicationStatusMap: StatusMap = {
+  draft: { label: "Draft", tone: "neutral" },
+  submitted: { label: "Submitted", tone: "info" },
+  under_review: { label: "Under Review", tone: "accent" },
+  approved: { label: "Approved", tone: "success" },
+  rejected: { label: "Rejected", tone: "danger" },
+  revisions_requested: { label: "Revisions Requested", tone: "warn" },
+  withdrawn: { label: "Withdrawn", tone: "neutral" },
+};
+
+export const customerTierToneMap: Record<string, StatusTone> = {
+  defense_prime: "accent",
+  itar_controlled: "warn",
+  growth_stage: "info",
+  enterprise: "neutral",
+};
+
+export const customerTierLabelMap: Record<string, string> = {
+  defense_prime: "Defense Prime",
+  itar_controlled: "ITAR-Controlled",
+  growth_stage: "Growth-Stage",
+  enterprise: "Enterprise",
+};
+
 export const supplierStatusMap: StatusMap = {
   draft: { label: "Draft", tone: "neutral" },
   submitted: { label: "Submitted", tone: "info" },

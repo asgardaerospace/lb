@@ -156,6 +156,122 @@ export type CustomerTier =
   | "growth_stage"
   | "enterprise";
 
+export type CustomerApplicationStatus =
+  | "draft"
+  | "submitted"
+  | "under_review"
+  | "approved"
+  | "rejected"
+  | "revisions_requested"
+  | "withdrawn";
+
+export const REVIEW_ACTIONS = [
+  "mark_under_review",
+  "request_info",
+  "approve",
+  "reject",
+] as const;
+export type ReviewAction = (typeof REVIEW_ACTIONS)[number];
+
+export const REVIEW_ACTION_TO_STATUS: Record<ReviewAction, CustomerApplicationStatus> = {
+  mark_under_review: "under_review",
+  request_info: "revisions_requested",
+  approve: "approved",
+  reject: "rejected",
+};
+
+export interface CustomerApplicationListRow {
+  id: string;
+  status: CustomerApplicationStatus;
+  legal_name: string;
+  dba: string | null;
+  hq_state: string | null;
+  hq_country: string;
+  org_type: string | null;
+  derived_tier: CustomerTier | null;
+  itar: boolean;
+  defense_program: boolean;
+  intake_email: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface CustomerApplicationDetail extends CustomerApplicationListRow {
+  funding_stage: string | null;
+  hq_city: string | null;
+  team_size: number | null;
+  cui: boolean;
+  as9100: boolean;
+  nadcap: boolean;
+  cmmc_level: string;
+  geography: string;
+  cost_vs_speed: number;
+  risk_tolerance: string | null;
+  suppliers_per_part: number;
+  typical_lead_time_weeks: number | null;
+  lead_time_tolerance: string | null;
+  first_use_action: string | null;
+  workspace_name: string | null;
+  workspace_subdomain: string | null;
+  data_residency: string | null;
+  sso_provider: string | null;
+  initial_seats: number | null;
+  payload: Record<string, unknown>;
+  payload_schema_version: number;
+  decision_notes: string | null;
+  reviewed_by: string | null;
+  organization_id: string | null;
+  intake_token: string | null;
+}
+
+export interface CustomerApplicationProgram {
+  id: string;
+  program_category: string;
+  stage: string;
+  annual_volume: number | null;
+  notes: string | null;
+}
+export interface CustomerApplicationProcess {
+  id: string;
+  process_type: string;
+}
+export interface CustomerApplicationContact {
+  id: string;
+  role: string;
+  name: string;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+}
+export interface CustomerApplicationDefenseProgram {
+  id: string;
+  program_name: string;
+  prime_contractor: string | null;
+  contract_vehicle: string | null;
+  dpas_rating: string | null;
+  far_clauses: string[];
+  notes: string | null;
+}
+export interface CustomerApplicationReview {
+  id: string;
+  reviewer_id: string;
+  reviewer_email: string | null;
+  action: string;
+  notes: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface CustomerApplicationFull {
+  application: CustomerApplicationDetail;
+  programs: CustomerApplicationProgram[];
+  processes: CustomerApplicationProcess[];
+  contacts: CustomerApplicationContact[];
+  defense_programs: CustomerApplicationDefenseProgram[];
+  reviews: CustomerApplicationReview[];
+}
+
 export function deriveCustomerTier(
   payload: CustomerApplicationPayload,
 ): CustomerTier {

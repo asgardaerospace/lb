@@ -40,6 +40,11 @@ const ICONS = {
 export const adminNav: NavItem[] = [
   { label: "Operations Center", href: "/admin", icon: ICONS.grid },
   { label: "Companies", href: "/admin/companies", icon: ICONS.building },
+  {
+    label: "Customer Applications",
+    href: "/admin/customer-applications",
+    icon: ICONS.eye,
+  },
   { label: "Suppliers", href: "/admin/suppliers", icon: ICONS.users },
   { label: "Quote Pipeline", href: "/admin/quotes", icon: ICONS.dollar },
   { label: "Routing Queue", href: "/admin/routing", icon: ICONS.route },

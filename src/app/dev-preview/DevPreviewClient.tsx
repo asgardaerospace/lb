@@ -50,6 +50,13 @@ const SCREENS: Record<Exclude<Role, "all">, Screen[]> = {
       status: "wired",
     },
     {
+      title: "Customer Applications",
+      href: "/admin/customer-applications",
+      description:
+        "Submitted onboarding intakes — filter by status/tier, search by company, drill in to review and decide.",
+      status: "wired",
+    },
+    {
       title: "Suppliers · Approval Queue",
       href: "/admin/suppliers",
       description: "Review supplier profiles awaiting qualification.",
